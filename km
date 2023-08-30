@@ -1,0 +1,233 @@
+#! /bin/bash
+
+LOG_FILE="./install.log"
+SCRIPT_VERSION="1.0.0"
+
+COMMAND=""
+
+KUBE_NETWORK_CIDR="10.244.0.0/16"
+KUBE_NETWORK_TYPE="flannel"
+KUBE_MASTER_MODE="ALONE"
+KUBE_ADDRESS=""
+KUBE_FIRST_MASTER_FLAG=0
+KUBE_MASTER_TOKEN=""
+KUBE_DISCOVERY_HASH=""
+KUBE_PORT=6443
+
+source "./common"
+
+# =============================================================================
+# NAME: help
+# DESC: display help message
+# =============================================================================
+function help() {
+    cat <<-EOF
+
+Kubernetes master
+
+Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]
+
+Options (exclusives):
+
+ --dry
+   Run configuration without applying
+
+ --apply
+   Run configuration and apply it
+
+ --status
+   Display the current status of the kubernetes cluster
+
+ --list-networks
+   Display the available network list
+
+ --kubeconfig
+   Get kube config file   
+
+ --generate-join-tokens
+   Generate and display tokens to join cluster
+
+ --version                  
+   Display version information and exit
+
+ --help                     
+   Display this help and exit
+
+Parameters:
+
+ --mode
+   Define the master mode (alone, single, multi - default single)
+
+ --network-type
+   Define the kubernetes netw type
+ 
+ --kube-address
+   Define the wanted DNS or IP of kubernetes API
+
+ --master-port
+   Define the kubernetes API port
+
+ --first-master             
+   Define the current master as the first master of the cluster
+
+ --master-token
+   Define token to join cluster if multi and not first master 
+   (example: l0yjqz.v980dvbljqzxva53)
+
+ --discovery-hash
+   Define discovery hash to join cluster if multi and not first master 
+   (example: sha256:4f53c9bc7a89a2fd25d2bdcd2d7f371a93a6e80f60e9b6c71ef5678e977f0cb3)
+
+ --km-token
+   Define the km token containing the kube address, the master-token and the discovery-hash
+
+Exit status:
+ 0      if OK,
+ 1      if any problem
+
+Report bugs to <jfv.opensource@gmail.com>.
+EOF
+}
+
+# =============================================================================
+# NAME: version
+# DESC: display version of this tool
+# =============================================================================
+function version() {
+    cat <<-EOF
+Kubernetes master - $SCRIPT_VERSION
+This is free software; see the source for copying conditions.
+Written by J.F. Vincent
+EOF
+}
+
+# =============================================================================
+# NAME: network_list
+# DESC: list supported kubernetes networks
+# =============================================================================
+function network_list() {
+    cat <<-EOF
+Available network list:
+ - flannel (default)
+EOF
+
+}
+
+# =============================================================================
+# NAME: generate_join_tokens
+# DESC: Generate and display the token to allow new note joining the cluster
+# =============================================================================
+function generate_join_tokens() {
+
+    if [ ! -f /usr/bin/kubeadm ];
+    then
+        display_message "Kubeadm not present, is it a master node ?" "KO"
+        exit 1
+
+    fi
+    command=$(kubeadm token create --print-join-command 2> /dev/null)
+
+    if [ -z "${command}" ];
+    then
+        display_message "Can't generate token" "KO"
+        exit 1
+    else
+        kube_api=$(echo "$command"|cut -d ' ' -f 3)
+        token=$(echo "$command"|cut -d ' ' -f 5)
+        discover_hash=$(echo "$command"|cut -d ' ' -f 7)
+        if [ -z "${kube_api}" ];
+        then
+            display_message "Can't get api url" "KO"
+            exit 1
+        fi
+        if [ -z "${token}" ];
+        then
+            display_message "Can't get token" "KO"
+            exit 1
+        fi
+
+        if [ -z "$discover_hash" ];
+        then
+            display_message "Can't get discover hash" "KO"
+            exit 1
+        fi
+        echo "${kube_api},${token},${discover_hash}"|base64 -w 0
+    fi
+
+}
+
+# =============================================================================
+# NAME: check_master_mode
+# DESC: check if mode is supported
+# =============================================================================
+# $1 : mode
+# =============================================================================
+function check_master_mode() {
+    case "$1" in
+        "alone") ;;
+        "single") ;;
+        "multi");;
+        *) display_message "Mode '$1' not supported" "ERROR";
+           exit 1
+    esac
+    echo "$1"
+}
+
+# =============================================================================
+# NAME: main
+# =============================================================================
+
+opts=$(getopt \
+    --longoptions "help,version,dry,apply,status,list-networks,generate-join-tokens,mode:,network-type:,kube-address:,first-master,master-token:,discovery-hash:,km-token:" \
+    --name "$(basename "$0")" \
+    --options "" \
+    -- "$@"
+)
+eval set "--$opts"
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        --help) help; exit;;
+        --version) version; exit;;
+        --list-networks) network_list; exit;;
+        --generate-join-tokens) generate_join_tokens; exit;;
+        --dry) COMMAND="dry"; display_message "Not yet implemented" "KO"; exit 1;;
+        --apply) COMMAND="apply";; 
+        --status) COMMAND="status";display_message "Not yet implemented" "KO"; exit 1;;        
+        --kubeconfig) COMMAND="config";;
+        --mode) KUBE_MASTER_MODE=$(check_master_mode "${2,,}"); shift;;
+        --network-type) KUBE_NETWORK_TYPE="$2";shift;;
+        --kube-address) KUBE_ADDRESS="$2";shift;;       
+        --first-master) KUBE_FIRST_MASTER_FLAG=1;;
+        --master-token) KUBE_MASTER_TOKEN="$2";shift;;
+        --discovery-hash) KUBE_DISCOVERY_HASH="$2";shift;;
+        --km-token) decode_km_token "$2";  shift;;        
+    esac
+    shift
+done
+
+if [ -z "${COMMAND}" ];
+then
+    display_message "Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]" "ERROR"
+    exit 1
+fi
+
+if [ "$EUID" -ne 0 ]
+  then 
+  display_message "This script must be started as root" "ERROR"
+  exit
+fi
+
+if [ "${COMMAND}" == "apply" ];
+then
+    case "${KUBE_MASTER_MODE,,}" in
+        "alone")  common_config; KUBE_FIRST_MASTER_FLAG=1; configure_master "alone";;
+        "single") common_config; KUBE_FIRST_MASTER_FLAG=1; configure_master "single";;
+        "multi") common_config; KUBE_FIRST_MASTER_FLAG=1; configure_master "multi";;
+        *) display_message "Unsupported mode '$KUBE_MASTER_MODE'" "ERROR"
+    esac
+fi
+
+
+

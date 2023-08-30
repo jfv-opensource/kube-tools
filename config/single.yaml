@@ -1,0 +1,10 @@
+kube:
+  - version: 1.28
+  - type: ALONE
+  - network-type: flannel
+  - masters:
+    - server: 192.168.0.60
+  - workers:
+    - server: 2.3.4.5
+    - server: 3.3.4.5
+  

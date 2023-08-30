@@ -1,0 +1,332 @@
+#! /bin/bash
+
+LOG_FILE="./install.log"
+SCRIPT_VERSION="1.0.0"
+
+COMMAND=""
+CONFIG=""
+
+SSH_USER=""
+SSH_PASS=""
+SSH_KEY=""
+
+source "./common"
+
+# =============================================================================
+# NAME: help
+# DESC: display help message
+# =============================================================================
+function help() {
+    cat <<-EOF
+
+Kubernetes controller tool
+
+Usage: kc --dry|--apply|--status|--kubeconfig|--version|--help [--user <user>] [--password <password>] [--ssh-key ssh-key-file] --config Configuration-file
+
+Options (exclusives):
+
+ --dry
+   Run configuration without applying
+
+ --apply
+   Run configuration and apply it
+
+ --status
+   Display the current status of the kubernetes cluster
+
+ --kubeconfig
+   Download kube config file   
+
+ --version                  
+   Display version information and exit
+
+ --help                     
+   Display this help and exit
+
+Parameters:
+
+ --user
+   User account to connect hosts using ssh if needed
+
+ --password
+   User account password to connect hosts using ssh if needed
+
+ --ssh-key
+   Ssh private key file to hosts using ssh if not default
+
+Examples:
+
+  kc --dry --user admin ./config/cluster.yaml
+  Run all operations without applying anything on any hosts using "admin" account on targets
+
+  kc --apply --kubeconfig  --user admin -- ssh-key ./.ssh/my_key --config ./config/cluster.yaml
+  Run all operations using "admin" account on targets with the ssh private key "mykey"
+
+  kc --kubeconfig --config ./config/cluster.yaml
+  Get kubeconfig of the cluster
+
+  kc --status --config ./config/cluster.yaml
+  Get status of the cluster
+
+Configuration file:
+
+  kube:
+    - version: 1.28
+    - network-type: flannel
+    - load-balancers:
+      - type: nginx
+      - servers:
+        - server: 1.2.3.4
+        - server: 1.2.3.5 
+    - workers:
+      - server: 2.3.4.5
+      - server: 3.3.4.5
+    - masters:
+      - server: 2.3.4.6
+      - server: 3.3.4.6
+  
+  version [OPTIONNAL]: version of kubernetes to deploy (example 1.28).
+
+  network-type [OPTIONNAL]: the internal kubernetes network type (example: flannel).
+
+    The current version only support flannel.
+
+  load-balancer > type [OPTIONNAL].
+
+    The current version only support nginx.
+
+  load-balancer > servers > server [OPTIONNAL] : IP or DNS name of an host to be used as load balancer.
+
+  master > servers > server [MANDATORY] : IP or DNS name of an host to be used as master node.
+
+  workers > servers > server [OPTIONNAL] : IP or DNS name of an host to be used as worker node.
+
+Exit status:
+ 0      if OK,
+ 1      if any problem
+
+Report bugs to <jfv.opensource@gmail.com>.
+EOF
+}
+
+# =============================================================================
+# NAME: version
+# DESC: display version of this tool
+# =============================================================================
+function version() {
+    cat <<-EOF
+Kubernetes controler tool - $SCRIPT_VERSION
+This is free software; see the source for copying conditions.
+Written by J.F. Vincent
+EOF
+}
+
+# =============================================================================
+# NAME: ssh_command
+# DESC: execute command throws ssh
+# =============================================================================
+# $1 : remote hostname or ip
+# $2 : command to execute
+# $3 : remote user
+# $4 : remote user password or ""
+# $5 : private key if needed or ""
+# =============================================================================
+function ssh_command() {
+  SSH_command="ssh "
+  
+  if [ -z "$1" ];
+  then
+    display_message "No remote hostname or ip" "ERROR"
+    exit 1
+  fi
+
+  if [ -z "$2" ];
+  then
+    display_message "No command to execute on remote" "ERROR"
+    exit 1
+  fi
+
+  if [ -n "$3" ];
+  then
+    SSH_command="$SSH_command $3@"
+  fi
+  SSH_command="$SSH_command$1"
+
+  if [ -n "$4" ];
+  then
+    SSH_command="sshpass -p '$4' $SSH_command"
+  else
+    if [ -n "$5" ];
+    then
+      if [ ! -f "$5" ];
+      then
+        display_message "SSH keyfile '$5' not available" "ERROR"
+        exit 1
+      else  
+        SSH_command="$SSH_command -i $5"
+      fi
+    fi
+  fi
+  SSH_command="$SSH_command -C \"$2\""
+  echo "$SSH_command"
+  ("$SSH_command")
+
+}
+
+# =============================================================================
+# NAME: apply_config
+# DESC: apply a confirguration to cluster to create or update it
+# =============================================================================
+# $1 : configuration to apply
+# =============================================================================
+
+# @todo
+# cas de la suppression d'un node à gérer plus tard
+# cas de la bascule de alone à un autre état
+
+function apply_config() {
+
+  display_section "Appy config"
+  KUBE_VERSION=$(yq eval '.kube[] | .version' "$1"|grep -v null|head -n 1)
+  if [ -n "${KUBE_VERSION}" ];
+  then
+    display_message "Targetting kubernetes version '${KUBE_VERSION}'" "INFO"
+  fi
+
+  KUBE_COMPUTED_TYPE=""
+  
+  KUBE_NET=KUBE_VERSION=$(yq eval '.kube[] | .network-type' "$1"|grep -v null|head -n 1)
+  case "${KUBE_NET}" in
+    "flannel") ;;
+    *) display_message "Default or not supported network type: switching to default" "INFO";
+       KUBE_NET="flannel";;
+  esac
+  display_message "Targetting kubernetes network '${KUBE_NET}'" "INFO"
+
+  KUBE_NB_MASTERS=$(yq eval '.kube[].masters[].server' "$1"|wc -l)
+  KUBE_NB_WORKERS=$(yq eval '.kube[].workers[].server' "$1"|wc -l)
+  
+  if [ "${KUBE_NB_MASTERS}" -eq "0" ] && [ "${KUBE_NB_WORKERS}" -eq "0" ];
+  then
+    display_message "Config does not reference neither masters nor workers" "ERROR"
+    exit 1
+  fi
+  
+  if [ "${KUBE_NB_MASTERS}" -eq "0" ];
+  then
+    display_message "Config does not reference any masters" "ERROR"
+    exit 1
+  fi
+
+  if [ "${KUBE_NB_MASTERS}" -eq "1" ] && [ "${KUBE_NB_WORKERS}" -eq "0" ];
+  then
+    KUBE_COMPUTED_TYPE="ALONE"
+  fi
+
+  if [ "${KUBE_NB_MASTERS}" -eq "1" ] && [ "${KUBE_NB_WORKERS}" -gt "0" ];
+  then
+    KUBE_COMPUTED_TYPE="SINGLE"
+  fi
+
+  if [ "${KUBE_NB_MASTERS}" -gt "1" ] && [ "${KUBE_NB_WORKERS}" -eq "0" ];
+  then
+    display_message "Config trferences many masters but not workers" "ERROR"
+    exit 1     
+  fi  
+  
+  if [ "${KUBE_NB_MASTERS}" -gt "1" ] && [ "${KUBE_NB_WORKERS}" -gt "0" ];
+  then
+    KUBE_COMPUTED_TYPE="MULTI"
+  fi
+
+  
+
+  if [ "${KUBE_COMPUTED_TYPE}" == "SINGLE" ];
+  then
+    CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1")
+
+# on considère que les scripts sont installés et accessibles
+
+    display_section "Deploying master"
+    ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode single" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+    display_message_result "Deploying master"
+
+  else
+    display_message "Mode '${KUBE_COMPUTED_TYPE}' under working - not yet supported" "ERROR"
+    exit 1
+  fi
+}
+
+# =============================================================================
+# NAME: main
+# =============================================================================
+
+opts=$(getopt \
+    --longoptions "help,version,dry,apply,status,kubeconfig,user:,password:,ssh-key,config:" \
+    --name "$(basename "$0")" \
+    --options "" \
+    -- "$@"
+)
+eval set "--$opts"
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        --help) help; exit;;
+        --version) version; exit;;
+        --dry) COMMAND="dry";display_message "Not yet implemented" "KO"; exit 1;;
+        --apply) COMMAND="apply";;
+        --status) COMMAND="status";display_message "Not yet implemented" "KO"; exit 1;;
+        --kubeconfig) COMMAND="config";;
+        --user) SSH_USER="$2"; shift;;
+        --password) SSH_PASS="$2"; shift;;       
+        --ssh-key) SSH_KEY="$2"; shift;;
+        --config) CONFIG="$2"; shift;;
+    esac
+    shift
+done
+
+# we need to read the command line to get all parameters before running commands
+# then a second round is needed. Before we validate needs are present.
+if ! command -v ssh &> /dev/null;
+then
+  display_message "Command 'ssh' is needed but not installed" "ERROR"
+  exit 1
+fi
+if ! command -v yq &> /dev/null;
+then
+  display_message "Command 'yq' is needed but not installed" "ERROR"
+  exit 1
+fi
+
+# check if configuration file is present and well formed.
+if [ -z "${CONFIG}" ];
+then
+  display_message "File ${CONFIG} can't has no value" "ERROR"
+  exit 1
+fi
+
+if [ ! -f "${CONFIG}" ];
+then
+  display_message "File ${CONFIG} can't be found" "ERROR"
+  exit 1
+fi
+
+yq eval-all  "${CONFIG}" > /dev/null 2>&1
+if [ "$?" -eq 1 ];
+then
+  display_message "File ${CONFIG} not well formed" "ERROR"
+fi
+
+# run commands
+
+case "$COMMAND" in
+  "dry") echo "Under working"; exit;;
+  "apply") apply_config "${CONFIG}";;
+  "status") echo "Under working"; exit;;
+  "kubeconfig") echo "Under working"; exit;;
+  *) display_message "Missing command\n" "ERROR";
+     display_message "Usage: kc --dry|--apply|--status|--kubeconfig|--version|--help [--user <user>] [--password <password>] [--ssh-key ssh-key-file] --config Configuration-file" "ERROR"; 
+     exit 1;;
+esac
+

@@ -1,0 +1,266 @@
+#! /bin/bash
+
+
+# =============================================================================
+# NAME: display_section
+# DESC: display a section / title on the output
+# =============================================================================
+# $1 message to display
+# =============================================================================
+function  display_section() {
+    # echo -e "\033[0;1;4m$1\033[0;0m"
+    printf "\033[0;1;4m%s\033[0;0m\n" "$1"
+}
+
+# =============================================================================
+# NAME: display_message
+# DESC: display a message / title on the output
+# =============================================================================
+# $1 message
+# $2 status
+# =============================================================================
+function  display_message() {
+    case "${2^^}" in
+        "OK") COLOR="\033[0;32m";;
+        "KO") COLOR="\033[0;31m";;
+        "ERROR") COLOR="\033[0;31m";;
+        "WARN") COLOR="\033[0;33m";;
+        "INFO") COLOR="\033[1;34m";;
+    esac
+    printf "$(date '+%Y-%m-%d %H:%M:%S') [$COLOR${2}\033[0;0m] $1\n"
+}
+
+# =============================================================================
+# NAME: display_message_result
+# DESC: display a message / title on the output using the last command result
+#       as OK / KO status flag
+# =============================================================================
+# $1 message
+# =============================================================================
+function  display_message_result() {
+    if [ "$?" -eq 0 ];
+    then
+        display_message "$1" "OK"
+
+    else
+        display_message "$1" "KO"
+        exit 1
+    fi
+}
+
+
+# =============================================================================
+# NAME: common_install
+# DESC: install the kubernetes commands like kubeadm and kubectl
+# =============================================================================
+
+function common_install() {
+    display_section "Configure repositories & install packages"
+    apt update  > /dev/null 2>&1
+    display_message_result "Updating package repository"
+    apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates > /dev/null 2>&1
+    display_message_result "Installing base needed packages"
+
+    rm -f /etc/apt/trusted.gpg.d/docker.gpg 
+    curl -fsSL "https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep 'Distributor ID:'|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]')/gpg" | gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg 
+    display_message_result "Adding docker package repository signature"
+
+    add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
+    display_message_result "Adding docker package repository"
+
+    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -  > /dev/null 2>&1
+    display_message_result "Adding google package repository signature"
+
+    echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list > /dev/null
+    display_message_result "Adding google package repository"
+
+    apt update  > /dev/null 2>&1
+    display_message_result "Updating package repository"
+
+    apt install -y kubectl > /dev/null 2>&1
+    display_message_result "Installing kubectl"
+
+    apt-mark hold kubectl > /dev/null 2>&1
+    display_message_result "Freezing kubernetes tools version"
+
+}
+
+# =============================================================================
+# NAME: common_config
+# DESC: install the kubernetes commands like kubeadm and kubectl, then configure 
+#       host to support kubernetes node requierments
+# =============================================================================
+
+function common_config() {
+
+    common_install
+
+    display_section "Configure system"
+    swapoff -a
+    display_message_result "Disabling swap in this session"
+    sed  -i  '/swap/d' /etc/fstab 
+    display_message_result "Disabling swap in this file /etc/fstab"
+
+    modprobe overlay
+    display_message_result "Enabling module overlay"
+    modprobe br_netfilter
+    display_message_result "Enabling module br_netfilter"
+
+    cat >>/etc/modules-load.d/containerd.conf <<EOF
+overlay
+br_netfilter
+EOF
+    display_message_result "Enabling module load for containerd"
+
+
+    apt install -y containerd.io kubelet kubeadm kubectl > /dev/null 2>&1
+    display_message_result "Installing containerd & kubernetes tools"
+
+    apt-mark hold kubelet kubeadm kubectl > /dev/null 2>&1
+    display_message_result "Freezing kubernetes tools version"
+
+    containerd config default > /etc/containerd/config.toml
+    display_message_result "Configuring containerd 1#2"
+    sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+    display_message_result "Configuring containerd 2#2"
+
+    systemctl restart containerd
+    display_message_result "Restarting containerd"
+    systemctl enable containerd
+    display_message_result "Enabling containerd"
+
+    cat >>/etc/sysctl.d/kubernetes.conf <<EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+    display_message_result "Configuring network for kubernetes"
+
+    sysctl --system > /dev/null 2>&1
+    display_message_result "Applying system configuration"
+
+    swapoff -a
+}
+
+
+# =============================================================================
+# NAME: configure_master
+# DESC: configure a master node
+# =============================================================================
+# $1 : mode (alone or multi or single)
+# =============================================================================
+function configure_master() {
+    display_section "Configure kubernetes"
+    kube_status=$(kubectl get nodes 2> /dev/null|grep "$(hostname)")
+    if [ -n "${kube_status}" ];
+    then
+        display_message "Master node already exists" "OK"
+    else   
+        if [ "${KUBE_FIRST_MASTER_FLAG}" == "1" ];
+        then
+            cat << EOF > ./kubeadm-config.yaml
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+networking:
+    podSubnet: "${KUBE_NETWORK_CIDR}"
+EOF
+
+
+            if [ "$1" == "multi" ];
+            then
+            cat << EOF >> ./kubeadm-config.yaml
+kubernetesVersion: stable
+apiServer:
+  certSANs:
+  - ${KUBE_ADDRESS}
+controlPlaneEndpoint: "${KUBE_ADDRESS}:${KUBE_PORT}"
+EOF
+            fi
+            systemctl restart kubelet
+
+            kubeadm init --config=./kubeadm-config.yaml  >> "$LOG_FILE" 2>&1
+            display_message_result "Starting master node"
+
+            rm -f kubeadm-config.yaml
+
+            mkdir -p "$HOME/.kube"
+            cp -i /etc/kubernetes/admin.conf "$HOME/.kube/config"
+            chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+            display_message_result "Writting kubernetes config file to $HOME/.kube/config"
+
+            NET_URL=""
+            case "${KUBE_NETWORK_TYPE}" in
+                "flannel") NET_URL="https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml";;
+                *)  display_message "Unsupported network type - switching to default (flannel)" "WARN";
+                    NET_URL="https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml";;
+            esac
+
+            if [ -n  "${NET_URL}" ];
+            then
+                kubectl apply -f "${NET_URL}" >> "$LOG_FILE" 2>&1
+                display_message_result "Loading network configuration into cluster"
+            fi
+
+            if [ "$1" == "alone" ];
+            then
+               kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null 2>&1     
+                display_message_result "Allowing pods on master because of standalone node"      
+            fi
+        else
+            display_message "Next master" "INFO"
+
+            # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/
+            # kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
+        fi
+    fi
+}
+
+
+
+# =============================================================================
+# NAME: decode_km_token
+# DESC: extract content from km_token into context
+# =============================================================================
+# $1 : km_token
+# =============================================================================
+function decode_km_token() {
+    KUBE_KM_TOKEN="$1"
+    if [ -z "${KUBE_KM_TOKEN}" ];
+    then
+        display_message "--km-token is blank" "ERROR"
+        exit 1
+    fi
+    decoded_km_token=$(echo "${KUBE_KM_TOKEN}"|base64 -d 2> /dev/null)
+    display_message_result "Decoding km-token"
+
+
+    KUBE_ADDRESS=$(echo "${decoded_km_token}"|cut -d ',' -f 1)
+    KUBE_API_URL="${KUBE_ADDRESS}"
+
+    display_message_result "Extracting API url and port"
+    if [ -z "${KUBE_ADDRESS}" ];
+    then
+        display_message "--km-token not well formed: api address not present" "ERROR"
+        exit 1
+    fi
+
+    KUBE_MASTER_TOKEN=$(echo "${decoded_km_token}"|cut -d ',' -f 2)
+    display_message_result "Extracting join token"
+    if [ -z "${KUBE_MASTER_TOKEN}" ];
+    then
+        display_message "--km-token not well formed: join token not present" "ERROR"
+        exit 1
+    fi
+
+    KUBE_DISCOVERY_HASH=$(echo "${decoded_km_token}"|cut -d ',' -f 3)
+    display_message_result "Extracting discovery hash"
+    if [ -z "${KUBE_DISCOVERY_HASH}" ];
+    then
+        display_message "--km-token not well formed: discover hash not present" "ERROR"
+        exit 1
+    fi
+
+}
+
+
