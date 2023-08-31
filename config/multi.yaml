@@ -3,6 +3,8 @@ kube:
   - network-type: flannel
   - masters:
     - server: 192.168.0.60
+    - server: 192.168.0.63
+    - server: 192.168.0.64
   - workers:
     - server: 192.168.0.65
     - server: 192.168.0.66

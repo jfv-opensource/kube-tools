@@ -203,10 +203,10 @@ then
   exit 1
 fi
 
-if [ -n "${KUBE_MASTER_PORT}" ];
-then
-  KUBE_API_URL="${KUBE_ADDRESS}:${KUBE_MASTER_PORT}"
-fi
+# if [ -n "${KUBE_MASTER_PORT}" ];
+# then
+#   KUBE_API_URL="${KUBE_ADDRESS}:${KUBE_MASTER_PORT}"
+# fi
 common_config
 display_section "Configure kubernetes"
 

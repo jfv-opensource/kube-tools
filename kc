@@ -132,7 +132,9 @@ EOF
 # $5 : private key if needed or ""
 # =============================================================================
 function ssh_command() {
-  SSH_command="ssh "
+  
+  target="$1"
+  cert_param=""
   
   if [ -z "$1" ];
   then
@@ -148,13 +150,12 @@ function ssh_command() {
 
   if [ -n "$3" ];
   then
-    SSH_command="$SSH_command $3@"
+    target="$3@$target"
   fi
-  SSH_command="$SSH_command$1"
 
   if [ -n "$4" ];
   then
-    SSH_command="sshpass -p '$4' $SSH_command"
+    sshpass -p "$4" /usr/bin/ssh "$target" -C "$2" "${cert_param}"
   else
     if [ -n "$5" ];
     then
@@ -162,15 +163,14 @@ function ssh_command() {
       then
         display_message "SSH keyfile '$5' not available" "ERROR"
         exit 1
-      else  
-        SSH_command="$SSH_command -i $5"
+      else
+        cert_param="-i $5"
       fi
     fi
+    /usr/bin/ssh  -n "$target" -C "$2" "${cert_param}"
   fi
-  SSH_command="$SSH_command -C \"$2\""
-  echo "$SSH_command"
-  ("$SSH_command")
-
+  
+  
 }
 
 # =============================================================================
@@ -186,7 +186,10 @@ function ssh_command() {
 
 function apply_config() {
 
-  display_section "Appy config"
+  rm -Rf cache
+  mkdir -p cache
+
+  display_section "Apply config"
   KUBE_VERSION=$(yq eval '.kube[] | .version' "$1"|grep -v null|head -n 1)
   if [ -n "${KUBE_VERSION}" ];
   then
@@ -237,6 +240,8 @@ function apply_config() {
   if [ "${KUBE_NB_MASTERS}" -gt "1" ] && [ "${KUBE_NB_WORKERS}" -gt "0" ];
   then
     KUBE_COMPUTED_TYPE="MULTI"
+    display_message "Under working - not supported yet" "ERROR"
+    exit 1
   fi
 
   
@@ -247,14 +252,55 @@ function apply_config() {
 
 # on considère que les scripts sont installés et accessibles
 
-    display_section "Deploying master"
-    ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode single" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+    display_section "Deploying master >> ${CURRENT_MASTER}"
+    ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode single" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
     display_message_result "Deploying master"
 
   else
     display_message "Mode '${KUBE_COMPUTED_TYPE}' under working - not yet supported" "ERROR"
     exit 1
   fi
+
+# At this step, we know one master is installed (maybe more)
+# We can ask it if the worker candidates are already known
+# by the cluster install it or not
+
+  CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1"|head -n 1)
+  KUBE_CONFIG=$(ssh_command "${CURRENT_MASTER}" "sudo ./km --kubeconfig" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
+  display_message_result "Downloading kubeconfig"
+  echo "${KUBE_CONFIG}" > cache/config
+
+
+  KUBE_TOKEN=$(ssh_command "${CURRENT_MASTER}" "sudo ./km --generate-join-tokens" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
+  if [ -z "${KUBE_TOKEN}" ];
+  then
+    display_message "Can't get join token" "ERROR"
+    exit 1
+  fi
+
+
+  display_section "Deploying workers >>"
+  KUBE_WORKERS=$(yq eval '.kube[].workers[].server' "$1")
+  export KUBE_WORKERS
+
+  while IFS= read -r KUBE_CURRENT_WORKER; do
+    WORKER_STATUS=$(kubectl --kubeconfig cache/config get node -o wide|grep "${KUBE_CURRENT_WORKER}"|wc -l)
+    display_message_result "Checking worker '${KUBE_CURRENT_WORKER}' in cluster"
+    if [ "${WORKER_STATUS}" -eq 0 ];
+    then
+      display_message "Worker '${KUBE_CURRENT_WORKER}' to be installed" "INFO"
+      display_section "Deploying worker >>>> ${KUBE_CURRENT_WORKER}"
+      ssh_command "${KUBE_CURRENT_WORKER}" "sudo ./kw --apply --km-token ${KUBE_TOKEN}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+      display_message_result "Worker '${KUBE_CURRENT_WORKER}' join cluster"
+
+    else
+      display_message "Worker '${KUBE_CURRENT_WORKER}' already known - skipping" "OK"
+    fi
+
+  done <<< "${KUBE_WORKERS}"
+
+# kubectl --kubeconfig cache/config
+
 }
 
 # =============================================================================

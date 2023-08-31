@@ -178,7 +178,7 @@ function check_master_mode() {
 # =============================================================================
 
 opts=$(getopt \
-    --longoptions "help,version,dry,apply,status,list-networks,generate-join-tokens,mode:,network-type:,kube-address:,first-master,master-token:,discovery-hash:,km-token:" \
+    --longoptions "help,version,dry,apply,status,list-networks,generate-join-tokens,kubeconfig,mode:,network-type:,kube-address:,first-master,master-token:,discovery-hash:,km-token:" \
     --name "$(basename "$0")" \
     --options "" \
     -- "$@"
@@ -219,6 +219,15 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
+if [ "${COMMAND}" == "config" ];
+then
+  if [ ! -f /etc/kubernetes/admin.conf ];
+  then
+    display_message "Can't access kubeconfig file" "ERROR"
+  else
+    cat /etc/kubernetes/admin.conf
+  fi
+fi
 if [ "${COMMAND}" == "apply" ];
 then
     case "${KUBE_MASTER_MODE,,}" in
