@@ -244,8 +244,6 @@ function apply_config() {
     exit 1
   fi
 
-  
-
   if [ "${KUBE_COMPUTED_TYPE}" == "SINGLE" ];
   then
     CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1")
@@ -264,7 +262,6 @@ function apply_config() {
 # At this step, we know one master is installed (maybe more)
 # We can ask it if the worker candidates are already known
 # by the cluster install it or not
-
   CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1"|head -n 1)
   KUBE_CONFIG=$(ssh_command "${CURRENT_MASTER}" "sudo ./km --kubeconfig" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
   display_message_result "Downloading kubeconfig"
@@ -298,8 +295,6 @@ function apply_config() {
     fi
 
   done <<< "${KUBE_WORKERS}"
-
-# kubectl --kubeconfig cache/config
 
 }
 
@@ -365,7 +360,6 @@ then
 fi
 
 # run commands
-
 case "$COMMAND" in
   "dry") echo "Under working"; exit;;
   "apply") apply_config "${CONFIG}";;

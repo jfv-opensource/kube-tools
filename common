@@ -165,8 +165,6 @@ kind: ClusterConfiguration
 networking:
     podSubnet: "${KUBE_NETWORK_CIDR}"
 EOF
-
-
             if [ "$1" == "multi" ];
             then
             cat << EOF >> ./kubeadm-config.yaml
@@ -204,17 +202,39 @@ EOF
 
             if [ "$1" == "alone" ];
             then
-               kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null 2>&1     
-                display_message_result "Allowing pods on master because of standalone node"      
+#              kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null 2>&1
+               kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- > /dev/null 2>&1
+
+               display_message_result "Allowing pods on master because of standalone node"
             fi
         else
             display_message "Next master" "INFO"
+            kubeadm join "${KUBE_API_URL}" --token "${KUBE_MASTER_TOKEN}" --discovery-token-ca-cert-hash "${KUBE_DISCOVERY_HASH}" --control-plane > /dev/null 2>&1
+            display_message_result "Master joining cluster"
 
             # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/
             # kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
         fi
     fi
 }
+
+
+
+
+# =============================================================================
+# NAME: status_master
+# DESC: read master status
+# =============================================================================
+function status_master() {   
+    node_status=$(kubectl get nodes 2> /dev/null|grep "$(hostname)")
+    if [ -n "${node_status}" ];
+    then
+        echo "installed"
+    else
+        echo "not installed"
+    fi
+}
+
 
 
 
@@ -260,7 +280,47 @@ function decode_km_token() {
         display_message "--km-token not well formed: discover hash not present" "ERROR"
         exit 1
     fi
-
 }
 
+# =============================================================================
+# NAME: install_nginx
+# DESC: install nginx and configure it as load balancer
+# =============================================================================
+# $1 : server list
+# =============================================================================
+function install_nginx() {
+    display_section "Installing Nginx"
+    apt update  > /dev/null 2>&1
+    display_message_result "Updating package repository"
+    apt install -y nginx ufw > /dev/null 2>&1
+    display_message_result "Installing base needed packages"
+    ufw allow 'Nginx Full' > /dev/null 2>&1
+    display_message_result "Allow port 'Nginx Full' in firewall"
+    ufw allow 'Nginx HTTP' > /dev/null 2>&1
+    display_message_result "Allow port 'Nginx HTTP' in firewall"
+    ufw allow 'Nginx HTTPS' > /dev/null 2>&1
+    display_message_result "Allow port 'Nginx HTTPS' in firewall"
 
+    mkdir -p /etc/nginx/tcpconf.d
+    cat << EOF| sudo echo -e /etc/nginx/tcpconf.d/kubernetes.conf >/dev/null
+stream {
+  upstream kubernetes {
+      $(echo -e $1)
+  }
+  server {
+      listen 6443;
+      listen 443;
+      proxy_pass kubernetes;
+   }
+}
+EOF
+    display_message_result "Creating Nginx LB configuration file"
+    if ! grep -q tcpconf.d /etc/nginx/nginx.conf; 
+    then
+        echo 'include /etc/nginx/tcpconf.d/*;' >> /etc/nginx/nginx.conf
+        display_message_result "Loading Nginx LB configuration file in default configuration"
+    fi
+    systemctl stop haproxy 2> /dev/null||true
+    systemctl restart nginx
+    display_message_result "Restarting Nginx and loading LB configuration"
+}

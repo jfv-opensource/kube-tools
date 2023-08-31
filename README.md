@@ -155,3 +155,25 @@ Usage: kw --dry|--apply|--status|--version|--help [--kube-address <kube-address>
 * **--master-token**: Define token to join cluster if multi and not first master (example: 0yjqz80dvbljqzxva53).
 * **--discovery-hash**: Define discovery hash to join cluster if multi and not first master (example: sha256:4f53c9bc7a89a2fd25d2bdcd2d7f371a93a6e80f60e9b6c71ef5678e977f0cb3
 * **--km-token**: Define the km token containing the kube address, the master-token and the discovery-hash
+
+## klb - Kube load-balancer
+
+The kube load-balancer deploys one load-balancer to dispatch requests between masters and support master fails. It can be used alone or from a remote *kc* command.
+
+### Command
+
+Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> --master <master1> [--master <master2>] ...
+
+#### Options
+
+ * **--dry**: Run configuration without applying.
+ * **--apply**: Run configuration and apply it.
+ * **--status**: Display the current status of the kubernetes cluster.
+  * **--list-types**: Display supported load-balancing type.
+ * **--version**: Display version information and exit.
+ * **--help**: Display this help and exit.
+
+#### Parameters
+
+ * **--type**: Define the load balancer type (should not be changed after installation)
+ * **--master**: Define a server name or ip to include into load balancing

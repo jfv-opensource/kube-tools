@@ -194,7 +194,7 @@ do
         --generate-join-tokens) generate_join_tokens; exit;;
         --dry) COMMAND="dry"; display_message "Not yet implemented" "KO"; exit 1;;
         --apply) COMMAND="apply";; 
-        --status) COMMAND="status";display_message "Not yet implemented" "KO"; exit 1;;        
+        --status) status_master; exit;;
         --kubeconfig) COMMAND="config";;
         --mode) KUBE_MASTER_MODE=$(check_master_mode "${2,,}"); shift;;
         --network-type) KUBE_NETWORK_TYPE="$2";shift;;
@@ -228,6 +228,7 @@ then
     cat /etc/kubernetes/admin.conf
   fi
 fi
+
 if [ "${COMMAND}" == "apply" ];
 then
     case "${KUBE_MASTER_MODE,,}" in
@@ -237,6 +238,3 @@ then
         *) display_message "Unsupported mode '$KUBE_MASTER_MODE'" "ERROR"
     esac
 fi
-
-
-

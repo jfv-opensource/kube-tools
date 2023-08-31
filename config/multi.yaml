@@ -1,6 +1,10 @@
 kube:
   - version: 1.28
   - network-type: flannel
+  - load-balancers:
+    - type: nginx
+    - servers:
+      - server: 192.168.0.62
   - masters:
     - server: 192.168.0.60
     - server: 192.168.0.63

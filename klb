@@ -1,0 +1,152 @@
+#! /bin/bash
+
+LOG_FILE="./install.log"
+SCRIPT_VERSION="1.0.0"
+
+COMMAND=""
+
+TARGET_MASTERS=""
+TARGET_TYPE="nginx"
+
+source "./common"
+
+# =============================================================================
+# NAME: help
+# DESC: display help message
+# =============================================================================
+function help() {
+    cat <<-EOF
+
+Kubernetes load-balancer
+
+Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> --master <master1> [--master <master2>] ...
+
+Options (exclusives):
+
+ --dry
+   Run configuration without applying
+
+ --apply
+   Run configuration and apply it
+
+ --status
+   Display the current status of the kubernetes cluster
+
+  --list-types
+    Display supported load-balancing type
+
+ --version                  
+   Display version information and exit
+
+ --help                     
+   Display this help and exit
+
+Parameters:
+
+ --type
+   Define the load balancer type (should not be changed after installation)
+
+ --master
+   Define a server name or ip to include into load balancing
+
+Exit status:
+ 0      if OK,
+ 1      if any problem
+
+Report bugs to <jfv.opensource@gmail.com>.
+EOF
+}
+
+# =============================================================================
+# NAME: version
+# DESC: display version of this tool
+# =============================================================================
+function version() {
+    cat <<-EOF
+Kubernetes load-balancer - $SCRIPT_VERSION
+This is free software; see the source for copying conditions.
+Written by J.F. Vincent
+EOF
+}
+
+# =============================================================================
+# NAME: type_list
+# DESC: list supported kubernetes networks
+# =============================================================================
+function type_list() {
+    cat <<-EOF
+Available load-balancer list:
+ - nginx (default)
+EOF
+
+}
+
+# =============================================================================
+# NAME: check_type
+# DESC: check if mode is supported
+# =============================================================================
+# $1 : mode
+# =============================================================================
+function check_type() {
+    case "$1" in
+        "nginx") ;;
+        *) display_message "Type '$1' not supported" "ERROR";
+           exit 1
+    esac
+    echo "$1"
+}
+
+# =============================================================================
+# NAME: main
+# =============================================================================
+
+opts=$(getopt \
+    --longoptions "help,version,dry,apply,status,list-types,type:,master:" \
+    --name "$(basename "$0")" \
+    --options "" \
+    -- "$@"
+)
+eval set "--$opts"
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        --help) help; exit;;
+        --version) version; exit;;
+        --list-type) type_list; exit;;
+        --dry) COMMAND="dry"; display_message "Not yet implemented" "KO"; exit 1;;
+        --apply) COMMAND="apply";; 
+        --status) COMMAND="status";display_message "Not yet implemented" "KO"; exit 1;;        
+        --type) TARGET_TYPE=$(check_type "${2,,}"); shift;;
+        --master) TARGET_MASTERS="${TARGET_MASTERS}\tserver $2;\n";  shift;;
+    esac
+    shift
+done
+
+if [ -z "${COMMAND}" ];
+then
+    display_message "Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]" "ERROR"
+    exit 1
+fi
+
+if [ "$EUID" -ne 0 ]
+then 
+  display_message "This script must be started as root" "ERROR"
+  exit 1
+fi
+
+
+if [ "${TARGET_MASTERS}" == "" ];
+then
+  display_message "No master to add" "ERROR"
+  exit 1
+fi
+
+if [ "${COMMAND}" == "apply" ];
+then
+    case "${TARGET_TYPE}" in
+        "nginx") install_nginx "${TARGET_MASTERS}";;
+        *) display_message "Type '$1' not supported" "ERROR";
+           exit 1;;
+    esac
+fi
