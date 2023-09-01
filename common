@@ -210,12 +210,6 @@ EOF
                kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- > /dev/null 2>&1
 
                display_message_result "Allowing pods on master because of standalone node"
-               # waiting for master Ready
-               
-               display_message "Waiting for node $(hostname) condition=Ready during timeout=600s" "INFO"
-               kubectl wait --for=condition=Ready node $(hostname) --all --timeout=600s > /dev/null
-               display_message_result "Your cluster is Ready"
-
             fi
             generate_config_archive
 
@@ -365,44 +359,4 @@ function install_nginx_servers() {
 
     done <<< "$1"
 
-}
-
-
-
-# =============================================================================
-# NAME: load_config_archive
-# DESC: load archive containing masters certificats & others files needs
-# =============================================================================
-function load_config_archive() {
-    display_section "Configuration archive >> $(hostname)"
-    if [ -f ./kube-config.tgz ];
-    then
-        mkdir -p /etc/kubernetes/pki/etcd
-        display_message_result "Creating directory structure"
-
-        tar -xvzf ./kube-config.tgz -C / > /dev/null
-        display_message_result "Extracting configuration archive"
-    else
-        display_message "Can't find archive file in the current directory" "KO"
-        exit 1
-    fi
-}
-
-# =============================================================================
-# NAME: generate_config_archive
-# DESC: generate archive containing masters certificats & others files needs
-# =============================================================================
-function generate_config_archive() {
-    display_section "Configuration archive"
-    rm -f ./kube-config.tgz
-    tar -cvzf ./kube-config.tgz /etc/kubernetes/pki/ca.crt \
-        /etc/kubernetes/pki/ca.key \
-        /etc/kubernetes/pki/sa.key \
-        /etc/kubernetes/pki/sa.pub \
-        /etc/kubernetes/pki/front-proxy-ca.crt \
-        /etc/kubernetes/pki/front-proxy-ca.key \
-        /etc/kubernetes/pki/etcd/ca.crt \
-        /etc/kubernetes/pki/etcd/ca.key \
-        /etc/kubernetes/admin.conf > /dev/null 2>&1
-    display_message_result "Generating config archive"
 }
