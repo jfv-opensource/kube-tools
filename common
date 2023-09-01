@@ -209,7 +209,7 @@ EOF
 
                # waiting for master Ready
                display_message "Waiting for node $(hostname) condition=Ready during timeout=600s" "INFO"
-               kubectl wait --for=condition=Ready node $(hostname) --all --timeout=600s
+               kubectl wait --for=condition=Ready node $(hostname) --all --timeout=600s > /dev/null
                display_message_result "Your cluster is Ready"
             fi
         else
