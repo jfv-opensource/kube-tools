@@ -125,7 +125,7 @@ done
 
 if [ -z "${COMMAND}" ];
 then
-    display_message "Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]" "ERROR"
+    display_message "Usage: km --dry|--apply|--status|--version|--help --master <master1> [--master <master2>] --master <master3> ..." "ERROR"
     exit 1
 fi
 
@@ -145,7 +145,7 @@ fi
 if [ "${COMMAND}" == "apply" ];
 then
     case "${TARGET_TYPE}" in
-        "nginx") install_nginx "${TARGET_MASTERS}";;
+        "nginx") install_nginx_instance "${TARGET_MASTERS}";;
         *) display_message "Type '$1' not supported" "ERROR";
            exit 1;;
     esac

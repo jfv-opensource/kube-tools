@@ -5,6 +5,7 @@ SCRIPT_VERSION="1.0.0"
 
 COMMAND=""
 CONFIG=""
+KUBE_PORT="6443"
 
 SSH_USER=""
 SSH_PASS=""
@@ -72,9 +73,10 @@ Configuration file:
 
   kube:
     - version: 1.28
-    - network-type: flannel
+    - network-type: flannel    
     - load-balancers:
       - type: nginx
+      - dns: kubernetes.local
       - servers:
         - server: 1.2.3.4
         - server: 1.2.3.5 
@@ -93,11 +95,11 @@ Configuration file:
 
   load-balancer > type [OPTIONNAL].
 
-    The current version only support nginx.
+    The current version only support nginx and external.
 
   load-balancer > servers > server [OPTIONNAL] : IP or DNS name of an host to be used as load balancer.
 
-  master > servers > server [MANDATORY] : IP or DNS name of an host to be used as master node.
+  masters > servers > server [MANDATORY] : IP or DNS name of an host to be used as master node.
 
   workers > servers > server [OPTIONNAL] : IP or DNS name of an host to be used as worker node.
 
@@ -224,39 +226,100 @@ function apply_config() {
   if [ "${KUBE_NB_MASTERS}" -eq "1" ] && [ "${KUBE_NB_WORKERS}" -eq "0" ];
   then
     KUBE_COMPUTED_TYPE="ALONE"
+
+    display_section "Deploying master >> ${CURRENT_MASTER}"
+    ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode alone" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+    display_message_result "Deploying master"
   fi
 
   if [ "${KUBE_NB_MASTERS}" -eq "1" ] && [ "${KUBE_NB_WORKERS}" -gt "0" ];
   then
     KUBE_COMPUTED_TYPE="SINGLE"
+
+    CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1")
+    display_section "Deploying master >> ${CURRENT_MASTER}"
+    ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode single" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
+    display_message_result "Deploying master"
+
   fi
 
   if [ "${KUBE_NB_MASTERS}" -gt "1" ] && [ "${KUBE_NB_WORKERS}" -eq "0" ];
   then
-    display_message "Config trferences many masters but not workers" "ERROR"
-    exit 1     
+    display_message "Config references many masters but not workers" "ERROR"
+    exit 1
   fi  
   
   if [ "${KUBE_NB_MASTERS}" -gt "1" ] && [ "${KUBE_NB_WORKERS}" -gt "0" ];
   then
     KUBE_COMPUTED_TYPE="MULTI"
-    display_message "Under working - not supported yet" "ERROR"
-    exit 1
   fi
 
-  if [ "${KUBE_COMPUTED_TYPE}" == "SINGLE" ];
-  then
-    CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1")
+  if [ "${KUBE_COMPUTED_TYPE}" == "MULTI" ];
+  then   
+    KUBE_MASTERS=$(yq eval '.kube[].masters[].server' "$1")
+    
+    LB_TYPE=$(yq eval '.kube[].load-balancers[].type' "$1"|grep -v 'null'|head -n 1)
+    LB_DNS=$(yq eval '.kube[].load-balancers[].dns' "$1"|grep -v 'null'|head -n 1)   
+    LB_SERVERS=$(yq eval '.kube[].load-balancers[].servers[].server' "$1")
 
-# on considère que les scripts sont installés et accessibles
+    if [ -z "${LB_DNS}" ];
+    then
+      display_message "Config does not references a DNS for a multi master configuration" "ERROR"
+      exit 1
+    fi
 
-    display_section "Deploying master >> ${CURRENT_MASTER}"
-    ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode single" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
-    display_message_result "Deploying master"
+    if [ -z "${LB_TYPE}" ];
+    then
+      display_message "Config does not references a load-balancer type for a multi master configuration" "ERROR"
+      exit 1
+    fi
 
-  else
-    display_message "Mode '${KUBE_COMPUTED_TYPE}' under working - not yet supported" "ERROR"
-    exit 1
+    case "${LB_TYPE}" in
+      "nginx") install_nginx_servers "${LB_SERVERS}" "${KUBE_MASTERS}";;
+      "external") ;;
+      *) display_message "Config does not references a supported load-balancer type for a multi master configuration" "ERROR"; exit 1;;
+    esac
+
+
+    # Check all master candidates and test each one
+    KUBE_INSTALLED_MASTER=()
+    KUBE_UNINSTALLED_MASTER=()
+
+    while IFS= read -r KUBE_CURRENT_MASTER; do
+      MASTER_STATUS=$(ssh_command "${KUBE_CURRENT_MASTER}" "sudo ./km --status" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
+      display_message "${KUBE_CURRENT_MASTER} is $MASTER_STATUS" "INFO"
+      if [ "${MASTER_STATUS}" == "installed" ];
+      then
+        KUBE_INSTALLED_MASTER+=("${KUBE_CURRENT_MASTER}")
+      else
+        KUBE_UNINSTALLED_MASTER+=("${KUBE_CURRENT_MASTER}")
+      fi
+    done <<< "${KUBE_MASTERS}"
+
+echo "INSTALLED:"
+echo "~~~~~~~~~~"
+echo ${KUBE_INSTALLED_MASTER[@]}
+
+echo "UNINSTALLED:"
+echo "~~~~~~~~~~~~"
+echo ${KUBE_UNINSTALLED_MASTER[@]}
+
+    CURRENT_MASTER=""
+    if  [ ${#KUBE_INSTALLED_MASTER[@]} -eq 0 ];
+    then
+      display_message "No master(s) need to install first one" "INFO"
+      CURRENT_MASTER=${KUBE_UNINSTALLED_MASTER[0]}
+      display_message "Selecting ${CURRENT_MASTER} as first master" "INFO"
+
+      ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode multi --network-type ${KUBE_NET} --kube-address ${LB_DNS} --first-master" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
+
+      unset KUBE_UNINSTALLED_MASTER[0]
+    else   
+      CURRENT_MASTER=${KUBE_UNINSTALLED_MASTER[0]}
+      display_message "One or more master(s) present" "INFO"
+      CURRENT_MASTER=${KUBE_INSTALLED_MASTER[0]}    
+      display_message "Selecting ${CURRENT_MASTER} as first master" "INFO"   
+    fi
   fi
 
 # At this step, we know one master is installed (maybe more)
@@ -274,6 +337,19 @@ function apply_config() {
     display_message "Can't get join token" "ERROR"
     exit 1
   fi
+
+  if [ "${KUBE_COMPUTED_TYPE}" == "MULTI" ];
+  then
+    echo "UNINSTALLED:"
+    echo "~~~~~~~~~~~~"
+    echo ${KUBE_UNINSTALLED_MASTER[@]}
+
+
+
+
+  fi
+
+
 
 
   display_section "Deploying workers >>"

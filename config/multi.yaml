@@ -3,6 +3,7 @@ kube:
   - network-type: flannel
   - load-balancers:
     - type: nginx
+    - dns: kube.local
     - servers:
       - server: 192.168.0.62
   - masters:

@@ -286,9 +286,9 @@ function decode_km_token() {
 # NAME: install_nginx
 # DESC: install nginx and configure it as load balancer
 # =============================================================================
-# $1 : server list
+# $1 : master list
 # =============================================================================
-function install_nginx() {
+function install_nginx_instance() {
     display_section "Installing Nginx"
     apt update  > /dev/null 2>&1
     display_message_result "Updating package repository"
@@ -302,7 +302,7 @@ function install_nginx() {
     display_message_result "Allow port 'Nginx HTTPS' in firewall"
 
     mkdir -p /etc/nginx/tcpconf.d
-    cat << EOF| sudo echo -e /etc/nginx/tcpconf.d/kubernetes.conf >/dev/null
+    cat << EOF > /etc/nginx/tcpconf.d/kubernetes.conf
 stream {
   upstream kubernetes {
       $(echo -e $1)
@@ -323,4 +323,31 @@ EOF
     systemctl stop haproxy 2> /dev/null||true
     systemctl restart nginx
     display_message_result "Restarting Nginx and loading LB configuration"
+}
+
+
+
+# =============================================================================
+# NAME: install_nginx_servers
+# DESC: install nginx servers and configure them as load balancer
+# =============================================================================
+# $1 : nginx server list
+# $2 : master nodes list
+# =============================================================================
+function install_nginx_servers() {
+    display_section "Installing Nginx servers  >>"
+    MASTER_LIST_ARG=""
+    while IFS= read -r CURRENT_MASTER;
+    do
+        MASTER_LIST_ARG="${MASTER_LIST_ARG} --master ${CURRENT_MASTER}:${KUBE_PORT}"
+    done <<< "$2"
+
+    while IFS= read -r CURRENT_NGINX; do
+        display_section "Installing Nginx server >>>> ${CURRENT_NGINX}"
+
+        ssh_command "${CURRENT_NGINX}" "sudo ./klb --apply --type nginx ${MASTER_LIST_ARG}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+        display_message_result "Deploying nginx load-balancer"
+
+    done <<< "$1"
+
 }
