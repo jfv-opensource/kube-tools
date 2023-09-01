@@ -206,6 +206,11 @@ EOF
                kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- > /dev/null 2>&1
 
                display_message_result "Allowing pods on master because of standalone node"
+
+               # waiting for master Ready
+               display_message "Waiting for node $(hostname) condition=Ready during timeout=600s" "INFO"
+               kubectl wait --for=condition=Ready node $(hostname) --all --timeout=600s
+               display_message_result "Your cluster is Ready"
             fi
         else
             display_message "Next master" "INFO"
