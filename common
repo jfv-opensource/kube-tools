@@ -65,7 +65,7 @@ function common_install() {
     curl -fsSL "https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep 'Distributor ID:'|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]')/gpg" | gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg 
     display_message_result "Adding docker package repository signature"
 
-    add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
+    add-apt-repository --yes "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
     display_message_result "Adding docker package repository"
 
     curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -  > /dev/null 2>&1
@@ -210,6 +210,12 @@ EOF
                kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- > /dev/null 2>&1
 
                display_message_result "Allowing pods on master because of standalone node"
+               # waiting for master Ready
+               
+               display_message "Waiting for node $(hostname) condition=Ready during timeout=600s" "INFO"
+               kubectl wait --for=condition=Ready node $(hostname) --all --timeout=600s > /dev/null
+               display_message_result "Your cluster is Ready"
+
             fi
             generate_config_archive
 
@@ -225,10 +231,6 @@ EOF
             cp -i /etc/kubernetes/admin.conf "$HOME/.kube/config"
             chown "$(id -u):$(id -g)" "$HOME/.kube/config"
             display_message_result "Writting kubernetes config file to $HOME/.kube/config"
-
-
-            # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/
-            # kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
         fi            
     fi
 }
