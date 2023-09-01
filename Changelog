@@ -1,0 +1,8 @@
+v1.0.1 (under working)
++ add multi-master clusters
++ add "Feature : wait for status NotReady Ready" by @alexandredevely
++ fix "adding Repository ask to Press [ENTER] to continue" by @alexandredevely
+
+v1.0.0
+~~~~~~~~~~~~~~~~~~~~~~
+- first version
