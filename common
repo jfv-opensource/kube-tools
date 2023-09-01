@@ -27,7 +27,7 @@ function  display_message() {
         "WARN") COLOR="\033[0;33m";;
         "INFO") COLOR="\033[1;34m";;
     esac
-    printf "$(date '+%Y-%m-%d %H:%M:%S') [$COLOR${2}\033[0;0m] $1\n"
+    printf "$(date '+%Y-%m-%d %H:%M:%S') [$COLOR${2}\033[0;0m] - $(hostname): $1\n"
 }
 
 # =============================================================================
@@ -151,7 +151,11 @@ EOF
 # =============================================================================
 function configure_master() {
     display_section "Configure kubernetes"
-    kube_status=$(kubectl get nodes 2> /dev/null|grep "$(hostname)")
+    kube_status=""
+    if [ -f /etc/kubernetes/admin.conf ];
+    then
+        kube_status=$(kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2> /dev/null|grep "$(hostname)")   
+    fi
     if [ -n "${kube_status}" ];
     then
         display_message "Master node already exists" "OK"
@@ -172,7 +176,7 @@ kubernetesVersion: stable
 apiServer:
   certSANs:
   - ${KUBE_ADDRESS}
-controlPlaneEndpoint: "${KUBE_ADDRESS}:${KUBE_PORT}"
+controlPlaneEndpoint: "${KUBE_ADDRESS}"
 EOF
             fi
             systemctl restart kubelet
@@ -207,14 +211,25 @@ EOF
 
                display_message_result "Allowing pods on master because of standalone node"
             fi
+            generate_config_archive
+
         else
             display_message "Next master" "INFO"
+
+            load_config_archive
+
             kubeadm join "${KUBE_API_URL}" --token "${KUBE_MASTER_TOKEN}" --discovery-token-ca-cert-hash "${KUBE_DISCOVERY_HASH}" --control-plane > /dev/null 2>&1
             display_message_result "Master joining cluster"
 
+            mkdir -p "$HOME/.kube"
+            cp -i /etc/kubernetes/admin.conf "$HOME/.kube/config"
+            chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+            display_message_result "Writting kubernetes config file to $HOME/.kube/config"
+
+
             # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/
             # kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
-        fi
+        fi            
     fi
 }
 
@@ -289,7 +304,7 @@ function decode_km_token() {
 # $1 : master list
 # =============================================================================
 function install_nginx_instance() {
-    display_section "Installing Nginx"
+    display_section "Installing Nginx >> $(hostname)"
     apt update  > /dev/null 2>&1
     display_message_result "Updating package repository"
     apt install -y nginx ufw > /dev/null 2>&1
@@ -335,7 +350,7 @@ EOF
 # $2 : master nodes list
 # =============================================================================
 function install_nginx_servers() {
-    display_section "Installing Nginx servers  >>"
+    display_section "Installing Nginx servers list"
     MASTER_LIST_ARG=""
     while IFS= read -r CURRENT_MASTER;
     do
@@ -343,11 +358,49 @@ function install_nginx_servers() {
     done <<< "$2"
 
     while IFS= read -r CURRENT_NGINX; do
-        display_section "Installing Nginx server >>>> ${CURRENT_NGINX}"
-
         ssh_command "${CURRENT_NGINX}" "sudo ./klb --apply --type nginx ${MASTER_LIST_ARG}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
         display_message_result "Deploying nginx load-balancer"
 
     done <<< "$1"
 
+}
+
+
+
+# =============================================================================
+# NAME: load_config_archive
+# DESC: load archive containing masters certificats & others files needs
+# =============================================================================
+function load_config_archive() {
+    display_section "Configuration archive >> $(hostname)"
+    if [ -f ./kube-config.tgz ];
+    then
+        mkdir -p /etc/kubernetes/pki/etcd
+        display_message_result "Creating directory structure"
+
+        tar -xvzf ./kube-config.tgz -C / > /dev/null
+        display_message_result "Extracting configuration archive"
+    else
+        display_message "Can't find archive file in the current directory" "KO"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# NAME: generate_config_archive
+# DESC: generate archive containing masters certificats & others files needs
+# =============================================================================
+function generate_config_archive() {
+    display_section "Configuration archive"
+    rm -f ./kube-config.tgz
+    tar -cvzf ./kube-config.tgz /etc/kubernetes/pki/ca.crt \
+        /etc/kubernetes/pki/ca.key \
+        /etc/kubernetes/pki/sa.key \
+        /etc/kubernetes/pki/sa.pub \
+        /etc/kubernetes/pki/front-proxy-ca.crt \
+        /etc/kubernetes/pki/front-proxy-ca.key \
+        /etc/kubernetes/pki/etcd/ca.crt \
+        /etc/kubernetes/pki/etcd/ca.key \
+        /etc/kubernetes/admin.conf > /dev/null 2>&1
+    display_message_result "Generating config archive"
 }

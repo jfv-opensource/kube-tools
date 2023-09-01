@@ -123,6 +123,120 @@ Written by J.F. Vincent
 EOF
 }
 
+
+# =============================================================================
+# NAME: download_master_config
+# DESC: download an archive from the first master with the configuration
+#       files like certificates
+# =============================================================================
+# $1 : remote hostname or ip
+# $2 : archive name
+# $3 : remote user
+# $4 : remote user password or ""
+# $5 : private key if needed or ""
+# =============================================================================
+function download_master_config() {
+  target="$1"
+  cert_param=""
+  
+  if [ -z "$1" ];
+  then
+    display_message "No remote hostname or ip" "ERROR"
+    exit 1
+  fi
+
+  if [ -z "$2" ];
+  then
+    display_message "No archive filename to download from remote" "ERROR"
+    exit 1
+  fi
+
+  if [ -n "$3" ];
+  then
+    target="$3@$target"
+  fi
+
+  if [ -n "$4" ];
+  then
+    sshpass -p "$4" /usr/bin/scp "$target:~/$2 ./cache/" "${cert_param}"  > /dev/null 2>&1
+  else
+    if [ -n "$5" ];
+    then
+      if [ ! -f "$5" ];
+      then
+        display_message "SSH keyfile '$5' not available" "ERROR"
+        exit 1
+      else
+        cert_param="-i $5"
+      fi
+    fi
+    if [ -n "${cert_param}" ];
+    then
+      /usr/bin/scp  "$target":~/"$2" ./cache/  "${cert_param}" > /dev/null 2>&1
+    else
+      /usr/bin/scp  "$target":~/"$2" ./cache/ > /dev/null 2>&1
+    fi
+  fi
+}
+
+# =============================================================================
+# NAME: upload_master_config
+# DESC: upload an archive from the first master with the configuration
+#       files like certificates
+# =============================================================================
+# $1 : remote hostname or ip
+# $2 : archive name
+# $3 : remote user
+# $4 : remote user password or ""
+# $5 : private key if needed or ""
+# =============================================================================
+function upload_master_config() {
+  target="$1"
+  cert_param=""
+  
+  if [ -z "$1" ];
+  then
+    display_message "No remote hostname or ip" "ERROR"
+    exit 1
+  fi
+
+  if [ -z "$2" ];
+  then
+    display_message "No archive filename to download from remote" "ERROR"
+    exit 1
+  fi
+
+  if [ -n "$3" ];
+  then
+    target="$3@$target"
+  fi
+
+  if [ -n "$4" ];
+  then
+    sshpass -p "$4" /usr/bin/scp "./cache/$2" "$target:~/" "${cert_param}" > /dev/null 2>&1
+  else
+    if [ -n "$5" ];
+    then
+      if [ ! -f "$5" ];
+      then
+        display_message "SSH keyfile '$5' not available" "ERROR"
+        exit 1
+      else
+        cert_param="-i $5"
+      fi
+    fi
+    if [ -n "${cert_param}" ];
+    then
+      /usr/bin/scp  "./cache/$2"  "$target:~/" "${cert_param}" > /dev/null 2>&1
+    else
+      /usr/bin/scp  "./cache/$2"  "$target:~/" > /dev/null 2>&1
+    fi
+  fi  
+}
+
+
+
+
 # =============================================================================
 # NAME: ssh_command
 # DESC: execute command throws ssh
@@ -280,6 +394,7 @@ function apply_config() {
       *) display_message "Config does not references a supported load-balancer type for a multi master configuration" "ERROR"; exit 1;;
     esac
 
+    display_section "Deploying masters"
 
     # Check all master candidates and test each one
     KUBE_INSTALLED_MASTER=()
@@ -296,14 +411,6 @@ function apply_config() {
       fi
     done <<< "${KUBE_MASTERS}"
 
-echo "INSTALLED:"
-echo "~~~~~~~~~~"
-echo ${KUBE_INSTALLED_MASTER[@]}
-
-echo "UNINSTALLED:"
-echo "~~~~~~~~~~~~"
-echo ${KUBE_UNINSTALLED_MASTER[@]}
-
     CURRENT_MASTER=""
     if  [ ${#KUBE_INSTALLED_MASTER[@]} -eq 0 ];
     then
@@ -312,7 +419,6 @@ echo ${KUBE_UNINSTALLED_MASTER[@]}
       display_message "Selecting ${CURRENT_MASTER} as first master" "INFO"
 
       ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode multi --network-type ${KUBE_NET} --kube-address ${LB_DNS} --first-master" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
-
       unset KUBE_UNINSTALLED_MASTER[0]
     else   
       CURRENT_MASTER=${KUBE_UNINSTALLED_MASTER[0]}
@@ -330,6 +436,9 @@ echo ${KUBE_UNINSTALLED_MASTER[@]}
   display_message_result "Downloading kubeconfig"
   echo "${KUBE_CONFIG}" > cache/config
 
+  download_master_config "${CURRENT_MASTER}" "kube-config.tgz" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+  display_message_result "Downloading archive config"
+
 
   KUBE_TOKEN=$(ssh_command "${CURRENT_MASTER}" "sudo ./km --generate-join-tokens" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
   if [ -z "${KUBE_TOKEN}" ];
@@ -340,13 +449,13 @@ echo ${KUBE_UNINSTALLED_MASTER[@]}
 
   if [ "${KUBE_COMPUTED_TYPE}" == "MULTI" ];
   then
-    echo "UNINSTALLED:"
-    echo "~~~~~~~~~~~~"
-    echo ${KUBE_UNINSTALLED_MASTER[@]}
+    for CURRENT_MASTER in "${KUBE_UNINSTALLED_MASTER[@]}"
+    do
+      upload_master_config "${CURRENT_MASTER}" "kube-config.tgz" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+      display_message_result "Uploading archive config to '${CURRENT_MASTER}'"
+      ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode multi --km-token ${KUBE_TOKEN}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
 
-
-
-
+    done
   fi
 
 

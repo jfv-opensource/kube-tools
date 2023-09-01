@@ -234,7 +234,7 @@ then
     case "${KUBE_MASTER_MODE,,}" in
         "alone")  common_config; KUBE_FIRST_MASTER_FLAG=1; configure_master "alone";;
         "single") common_config; KUBE_FIRST_MASTER_FLAG=1; configure_master "single";;
-        "multi") common_config; KUBE_FIRST_MASTER_FLAG=1; configure_master "multi";;
+        "multi") common_config; configure_master "multi";;
         *) display_message "Unsupported mode '$KUBE_MASTER_MODE'" "ERROR"
     esac
 fi
