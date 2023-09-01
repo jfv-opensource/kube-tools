@@ -65,7 +65,7 @@ function common_install() {
     curl -fsSL "https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep 'Distributor ID:'|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]')/gpg" | gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg 
     display_message_result "Adding docker package repository signature"
 
-    add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
+    add-apt-repository --yes "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
     display_message_result "Adding docker package repository"
 
     curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -  > /dev/null 2>&1
