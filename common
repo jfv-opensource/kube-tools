@@ -210,12 +210,18 @@ EOF
                kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- > /dev/null 2>&1
 
                display_message_result "Allowing pods on master because of standalone node"
-               # waiting for master Ready
                
+	       # waiting for master Ready
                display_message "Waiting for node $(hostname) condition=Ready during timeout=600s" "INFO"
                kubectl wait --for=condition=Ready node $(hostname) --all --timeout=600s > /dev/null
-               display_message_result "Your cluster is Ready"
-
+	       
+	       # check if node is Ready
+	       is_node_ready "$(hostname)"
+	       if [ "$?" -eq 0 ]; then
+        		display_message "Your cluster is Ready" "OK"
+               else
+                        display_message "Your cluster is not Ready" "KO"
+               fi
             fi
             generate_config_archive
 
@@ -238,6 +244,9 @@ EOF
 
 
 
+
+
+
 # =============================================================================
 # NAME: status_master
 # DESC: read master status
@@ -252,6 +261,24 @@ function status_master() {
     fi
 }
 
+
+# =============================================================================
+# NAME: is_node_ready
+# DESC: return 0 if $1 node name is Ready
+# =============================================================================
+# $1 name of the node
+# =============================================================================
+function is_node_ready() {
+  # filter to all nodes where name $1 .items[?(@.metadata.name==\"$1\")]
+  # read .status.conditions[] where type=Ready and return status value
+  # if status is True then node is Ready
+  is_ready=$(kubectl get node -o=jsonpath="{range .items[?(@.metadata.name==\""$1"\")]}{.status.conditions[?(@.type==\"Ready\")].status}")
+  if [ "$is_ready" = "True" ]; then
+          return 0
+  else
+          return 1
+  fi
+}
 
 
 
