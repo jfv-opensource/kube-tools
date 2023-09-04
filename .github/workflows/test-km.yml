@@ -42,17 +42,17 @@ jobs:
           ./inline.sh --in-file kc  --out-file kc.sh
           ./inline.sh --in-file kw  --out-file kw.sh
           ./inline.sh --in-file klb --out-file klb.sh
-          
-      - name: Create kube-tools-artifact
-        uses: actions/upload-artifact@v3
-          with:
-            name: kube-tools-artifact
-            path: |
-              km.sh
-              kc.sh
-              kw.sh
-              klb.sh
-              config
-              README.md
-              License
+
+      # create artifact 
+      - uses: actions/upload-artifact@v3
+        with:
+          name: kube-tools-artifact
+          path: |
+            km.sh
+            kc.sh
+            kw.sh
+            klb.sh
+            config
+            README.md
+            License
           
