@@ -1,5 +1,4 @@
 kube:
-  - version: 1.28
   - network-type: flannel
   - masters:
     - server: 192.168.0.60

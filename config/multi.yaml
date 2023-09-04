@@ -1,5 +1,4 @@
 kube:
-  - version: 1.28
   - network-type: flannel
   - load-balancers:
     - type: nginx
