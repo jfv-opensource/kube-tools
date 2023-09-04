@@ -182,6 +182,7 @@ EOF
             systemctl restart kubelet
 
             kubeadm init --config=./kubeadm-config.yaml  >> "$LOG_FILE" 2>&1
+
             display_message_result "Starting master node"
 
             rm -f kubeadm-config.yaml
@@ -206,7 +207,6 @@ EOF
 
             if [ "$1" == "alone" ];
             then
-#              kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null 2>&1
                kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- > /dev/null 2>&1
 
                display_message_result "Allowing pods on master because of standalone node"

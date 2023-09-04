@@ -25,7 +25,7 @@ function help() {
 
 Kubernetes master
 
-Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]
+Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--kube-version <version>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]
 
 Options (exclusives):
 
@@ -59,7 +59,7 @@ Parameters:
    Define the master mode (alone, single, multi - default single)
 
  --network-type
-   Define the kubernetes netw type
+   Define the kubernetes network type
  
  --kube-address
    Define the wanted DNS or IP of kubernetes API
@@ -173,6 +173,7 @@ function check_master_mode() {
     echo "$1"
 }
 
+
 # =============================================================================
 # NAME: main
 # =============================================================================
@@ -202,14 +203,14 @@ do
         --first-master) KUBE_FIRST_MASTER_FLAG=1;;
         --master-token) KUBE_MASTER_TOKEN="$2";shift;;
         --discovery-hash) KUBE_DISCOVERY_HASH="$2";shift;;
-        --km-token) decode_km_token "$2";  shift;;        
+        --km-token) decode_km_token "$2";  shift;;
     esac
     shift
 done
 
 if [ -z "${COMMAND}" ];
 then
-    display_message "Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]" "ERROR"
+    display_message "Usage: km --dry|--apply|--status|--list-networks|--kubeconfig|--version|--help [--mode <mode>] [--kube-version <version>] [--network-type <network-type>] [--kube-address <kube-address>] [--master-port <port>] [--first-master] [--master-token <master-token>] [--discovery-hash <discovery-hash>] [--km-token <km-token>]" "ERROR"
     exit 1
 fi
 

@@ -26,7 +26,6 @@ Please note version upgrades is not supported.
 
 ~~~ yaml
 kube:
-  - version: 1.28
   - network-type: flannel
   - load-balancers:
     - type: nginx
@@ -40,8 +39,6 @@ kube:
     - server: 2.3.4.6
     - server: 3.3.4.6
 ~~~  
-
-> version [OPTIONNAL]: version of kubernetes to deploy (example 1.28).
 
 > network-type [OPTIONNAL]: the internal kubernetes network type (example: flannel).
 
