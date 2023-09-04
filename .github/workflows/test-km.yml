@@ -26,3 +26,33 @@ jobs:
         # Runs km command using the runners shell
         - name: Run km script
           run: sudo ./km --apply
+  km_build:
+    name: build kube-tools
+    needs: km_matrix
+    runs-on: ubuntu-22.04
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      # Run inline.sh 
+      # replace source "./common" command by common file content
+      - name: Run inline.sh for each kube-tools script
+        run: |
+          ./inline.sh --in-file km  --out-file km.sh
+          ./inline.sh --in-file kc  --out-file kc.sh
+          ./inline.sh --in-file kw  --out-file kw.sh
+          ./inline.sh --in-file klb --out-file klb.sh
+          
+      - name: Create kube-tools-artifact
+        uses: actions/upload-artifact@v3
+          with:
+            name: kube-tools-artifact
+            path: |
+              km.sh
+              kc.sh
+              kw.sh
+              klb.sh
+              config
+              README.md
+              License
+          
