@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kubetools-hello-world
+spec:
+  containers:
+  - name: kubetools-hello-container
+    image: docker.io/hello-world 
+  restartPolicy: OnFailure
