@@ -222,6 +222,9 @@ EOF
                else
                         display_message "Your cluster is not Ready" "KO"
                fi
+
+	       # run a pod test
+	       test_pod_helloworld
             fi
             generate_config_archive
 
@@ -261,6 +264,40 @@ function status_master() {
     fi
 }
 
+
+# =============================================================================
+# NAME: test_pod_helloworld
+# DESC: run pod pod-helloworld.yml as test file
+# =============================================================================
+function test_pod_helloworld() {
+  # create pod helloworld
+  kubectl delete --grace-period=1 -f pod-helloworld.yml > /dev/null 2>/dev/null
+  kubectl create -f pod-helloworld.yml > /dev/null
+  display_message_result "create pod-helloworld"
+  # todo check if Ready=false is correct
+  # try --for=condition=Completed has failed
+  #
+  # debug command
+  # kubectl describe pod/pod-helloworld |grep Condition -A 5
+  # Conditions:
+  # Type              Status
+  # Initialized       True
+  # Ready             False
+  # ContainersReady   False
+  # PodScheduled      True
+  #
+  # wait for main lifecycle
+  # from https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/ 
+  # wait for PodScheduled
+  #kubectl wait --for=condition=PodScheduled    pod/pod-helloworld
+  #kubectl wait --for=condition=Initialized     pod/pod-helloworld
+  #kubectl wait --for=condition=Ready=False    pod/pod-helloworld
+  kubectl wait --for=condition=Ready pod/pod-helloworld > /dev/null
+  hello=$(kubectl logs --pod-running-timeout=20s pod/pod-helloworld |grep "hello")
+  display_message_result "pod-helloworld says $hello"
+  kubectl delete --grace-period=1 -f pod-helloworld.yml > /dev/null
+  display_message_result "delete pod-helloworld"
+}
 
 # =============================================================================
 # NAME: is_node_ready
