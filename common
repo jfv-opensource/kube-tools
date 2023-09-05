@@ -273,6 +273,20 @@ function status_master() {
 # DESC: run pod pod-helloworld.yml as test file
 # =============================================================================
 function test_pod_helloworld() {
+  # create hello yaml file
+   cat >pod-helloworld.yml <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-helloworld
+spec:
+  containers:
+  - name: container-helloworld
+    image: alpine
+    command: ["/bin/sh"]
+    args: ["-c", "echo hello world; sleep infinity"]
+  restartPolicy: OnFailure
+EOF
   # create pod helloworld
   kubectl delete --grace-period=1 -f pod-helloworld.yml > /dev/null 2>/dev/null
   kubectl create -f pod-helloworld.yml > /dev/null
@@ -301,8 +315,6 @@ function test_pod_helloworld() {
   kubectl delete --grace-period=1 -f pod-helloworld.yml > /dev/null
   display_message_result "delete pod-helloworld"
 }
-
-
 
 function ensure_default_account_created() {
   # The default account is known to take a while to appear; see
