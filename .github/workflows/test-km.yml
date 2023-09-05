@@ -48,6 +48,7 @@ jobs:
         with:
           name: kube-tools-artifact
           path: |
+            pod-helloworld.yml
             km.sh
             kc.sh
             kw.sh
