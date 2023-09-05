@@ -223,6 +223,9 @@ EOF
                         display_message "Your cluster is not Ready" "KO"
                fi
 
+	       # ensure default account created
+	       ensure_default_account_created
+
 	       # run a pod test
 	       test_pod_helloworld
             fi
@@ -298,6 +301,29 @@ function test_pod_helloworld() {
   kubectl delete --grace-period=1 -f pod-helloworld.yml > /dev/null
   display_message_result "delete pod-helloworld"
 }
+
+
+
+function ensure_default_account_created() {
+  # The default account is known to take a while to appear; see
+  #  https://github.com/kubernetes/kubernetes/issues/66689
+  i="0"
+  while [ $i -lt 10 ]
+  do
+    kubectl -n default get serviceaccount default -o name > /dev/null
+    if [ "$?" -eq 0 ];
+    then
+        display_message "default account service account is created" "OK"
+	break
+    else
+        display_message " retry $i/10 default account service account is net yet created, sleeping for 5s" "INFO"
+        sleep 5
+    fi
+    i=$[$i+1]
+  done  
+}
+
+
 
 # =============================================================================
 # NAME: is_node_ready
