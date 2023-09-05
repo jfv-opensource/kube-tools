@@ -328,10 +328,10 @@ function ensure_default_account_created() {
         display_message "default account service account is created" "OK"
 	break
     else
+	i=$[$i+1]
         display_message " retry $i/10 default account service account is net yet created, sleeping for 5s" "INFO"
         sleep 5
     fi
-    i=$[$i+1]
   done  
 }
 
