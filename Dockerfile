@@ -12,6 +12,6 @@ RUN apt update && \
     apt-get autoremove --yes  && \
     rm -rf /var/lib/{apt,dpkg,cache,log}/ 
 
-COPY --chmod=755 ./common ./kc ./klb ./kw ./km /usr/bin
+COPY --chmod=755 kc.sh klb.sh kw.sh km.sh /usr/bin
 
 
