@@ -465,7 +465,6 @@ function install_nginx_servers() {
 
         upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
         display_message_result "Pushing commands"
-        
         ssh_command "${CURRENT_NGINX}" "sudo ./klb --apply --type nginx ${MASTER_LIST_ARG}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
         display_message_result "Deploying nginx load-balancer"
 

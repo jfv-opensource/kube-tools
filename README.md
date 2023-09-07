@@ -87,25 +87,25 @@ Usage: kc --dry|--apply|--status|--kubeconfig|--version|--help [--user <user>] [
 #### Examples
 
 ~~~ bash  
-  kc --dry --user admin --config ./config/cluster.yaml
+  kc --dry --user admin --config ./config/cluster.json
 ~~~
 
   Run all operations without applying anything on any hosts using "admin" account on targets.
 
 ~~~ bash
-  kc --apply --kubeconfig  --user admin --ssh-key ./.ssh/my_key --config ./config/cluster.yaml
+  kc --apply --kubeconfig  --user admin --ssh-key ./.ssh/my_key --config ./config/cluster.json
 ~~~
 
   Run all operations using "admin" account on targets with the ssh private key "mykey".
 
 ~~~ bash
-  kc --kubeconfig --config ./config/cluster.yaml
+  kc --kubeconfig --config ./config/cluster.json
 ~~~
 
   Get kubeconfig of the cluster.
 
 ~~~ bash
-  kc --status --config ./config/cluster.yaml
+  kc --status --config ./config/cluster.json
 ~~~
 
   Get status of the cluster.
