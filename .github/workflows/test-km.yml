@@ -51,16 +51,6 @@ jobs:
          
       - name: "image tag"
         run: echo "image tag set to '${{ env.imagetag }}'"
-       
-      - name: Build and push
-        uses: docker/build-push-action@v4
-        with:
-          platforms: linux/amd64, linux/arm64
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            jfvopensource/kubetools:${{ env.imagetag }}
 
       # Run inline.sh 
       # replace source "./common" command by common file content
@@ -70,6 +60,16 @@ jobs:
           ./inline.sh --in-file kc  --out-file kc.sh
           ./inline.sh --in-file kw  --out-file kw.sh
           ./inline.sh --in-file klb --out-file klb.sh
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          platforms: linux/amd64, linux/arm64
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            jfvopensource/kubetools:${{ env.imagetag }}
 
       # create artifact 
       - uses: actions/upload-artifact@v3
