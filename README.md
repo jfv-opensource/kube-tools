@@ -10,34 +10,45 @@ Kube-tools is the source code project of a futur package including some tools to
 The *kube controller* need a package not including by default in distribution, to install it, run the following commands with sudo level:
 
 ~~~ bash
-add-apt-repository ppa:rmescandon/yq
-apt install yq -y
+apt install jq -y
 ~~~
 
 **Warning**: this code source is distributed as example and should not be used in production. It does not protect agains code injection by example.
 
 ## kc - Kube controller
 
-The kube controller pilot the scripts deployed on the differents hosts to deploy and configure the kubernetes cluster from a *yaml* configuration script.
+The kube controller pilot the scripts deployed on the differents hosts to deploy and configure the kubernetes cluster from a *json* description file.
 
-Please note version upgrades is not supported.
+Please note version upgrades is not yet supported.
 
 ### Configuration file
 
-~~~ yaml
-kube:
-  - network-type: flannel
-  - load-balancers:
-    - type: nginx
-    - servers:
-      - server: 1.2.3.4
-      - server: 1.2.3.5 
-  - workers:
-    - server: 2.3.4.5
-    - server: 3.3.4.5
-  - masters:
-    - server: 2.3.4.6
-    - server: 3.3.4.6
+~~~ json
+{ 
+  "kube": {
+    "network-type": "flannel",
+    "load-balancers": [
+      { "type": "nginx" },
+      { "dns": "kube.local" },
+      { "servers" : [
+          { "server" : "192.168.0.62" }
+        ]
+      }
+    ],
+    "masters": [
+      { "server": "192.168.0.60" },
+      { "server": "192.168.0.63" },
+      { "server": "192.168.0.64" }
+    ],
+    "workers": [
+      { "server": "192.168.0.65" },
+      { "server": "192.168.0.66" },
+      { "server": "192.168.0.67" }
+    ]
+  }
+}
+
+
 ~~~  
 
 > network-type [OPTIONNAL]: the internal kubernetes network type (example: flannel).

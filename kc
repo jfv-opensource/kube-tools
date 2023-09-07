@@ -176,6 +176,57 @@ function download_master_config() {
   fi
 }
 
+
+# =============================================================================
+# NAME: upload_tools
+# DESC: upload tools files
+# =============================================================================
+# $1 : remote hostname or ip
+# $2 : remote user
+# $3 : remote user password or ""
+# $4 : private key if needed or ""
+# =============================================================================
+function upload_tools() {
+  target="$1"
+  cert_param=""
+  
+  if [ -z "$1" ];
+  then
+    display_message "No remote hostname or ip" "ERROR"
+    exit 1
+  fi
+
+
+  if [ -n "$2" ];
+  then
+    target="$2@$target"
+  fi
+
+  if [ -n "$3" ];
+  then
+    sshpass -p "$3" /usr/bin/scp ./klb ./km ./kw ./common "$target:~/" "${cert_param}" > /dev/null 2>&1
+  else
+    if [ -n "$4" ];
+    then
+      if [ ! -f "$4" ];
+      then
+        display_message "SSH keyfile '$4' not available" "ERROR"
+        exit 1
+      else
+        cert_param="-i $4"
+      fi
+    fi
+    if [ -n "${cert_param}" ];
+    then
+      /usr/bin/scp  ./klb ./km ./kw ./common  "$target:~/" "${cert_param}" > /dev/null 2>&1
+    else
+      /usr/bin/scp  ./klb ./km ./kw ./common "$target:~/" > /dev/null 2>&1
+    fi
+  fi  
+}
+
+
+
 # =============================================================================
 # NAME: upload_master_config
 # DESC: upload an archive from the first master with the configuration
@@ -230,9 +281,6 @@ function upload_master_config() {
     fi
   fi  
 }
-
-
-
 
 # =============================================================================
 # NAME: ssh_command
@@ -306,7 +354,7 @@ function apply_config() {
 
   KUBE_COMPUTED_TYPE=""
   
-  KUBE_NET=$(yq eval '.kube[] | .network-type' "$1"|grep -v null|head -n 1)
+  KUBE_NET=$(jq -r '.kube."network-type"' "$1"|grep -v null|head -n 1)
   case "${KUBE_NET}" in
     "flannel") ;;
     *) display_message "Default or not supported network type: switching to default" "INFO";
@@ -314,9 +362,9 @@ function apply_config() {
   esac
   display_message "Targetting kubernetes network '${KUBE_NET}'" "INFO"
 
-  KUBE_NB_MASTERS=$(yq eval '.kube[].masters[].server' "$1"|wc -l)
-  KUBE_NB_WORKERS=$(yq eval '.kube[].workers[].server' "$1"|wc -l)
-  
+  KUBE_NB_MASTERS=$(jq -r '.kube.masters| length' "$1")
+  KUBE_NB_WORKERS=$(jq -r '.kube.workers| length' "$1")
+
   if [ "${KUBE_NB_MASTERS}" -eq "0" ] && [ "${KUBE_NB_WORKERS}" -eq "0" ];
   then
     display_message "Config does not reference neither masters nor workers" "ERROR"
@@ -333,7 +381,12 @@ function apply_config() {
   then
     KUBE_COMPUTED_TYPE="ALONE"
 
+    CURRENT_MASTER=$(jq -r '.kube.masters[].server' "$1")
     display_section "Deploying master >> ${CURRENT_MASTER}"
+
+    upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+    display_message_result "Pushing commands"
+
     ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode alone" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
     display_message_result "Deploying master"
   fi
@@ -342,8 +395,12 @@ function apply_config() {
   then
     KUBE_COMPUTED_TYPE="SINGLE"
 
-    CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1")
+    CURRENT_MASTER=$(jq -r '.kube.masters[].server' "$1")
     display_section "Deploying master >> ${CURRENT_MASTER}"
+
+    upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+    display_message_result "Pushing master"
+
     ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode single" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
     display_message_result "Deploying master"
 
@@ -362,11 +419,13 @@ function apply_config() {
 
   if [ "${KUBE_COMPUTED_TYPE}" == "MULTI" ];
   then   
-    KUBE_MASTERS=$(yq eval '.kube[].masters[].server' "$1")
+    KUBE_MASTERS=$(jq -r '.kube.masters[]' "$1"|jq ".server | select (. != null)")
     
-    LB_TYPE=$(yq eval '.kube[].load-balancers[].type' "$1"|grep -v 'null'|head -n 1)
-    LB_DNS=$(yq eval '.kube[].load-balancers[].dns' "$1"|grep -v 'null'|head -n 1)   
-    LB_SERVERS=$(yq eval '.kube[].load-balancers[].servers[].server' "$1")
+    jq -r '.kube."network-type"'
+    LB_TYPE=$(jq -r '.kube."load-balancers"[].type| select( . != null )' "$1"|head -n 1)
+    LB_DNS=$(jq -r '.kube."load-balancers"[].dns| select( . != null ' "$1"|grep -v 'null'|head -n 1)   
+    LB_SERVERS=$(jq -r '.kube."load-balancers"[].servers| select( . != null )' "$1" |jq -r ".[].server")
+    
 
     if [ -z "${LB_DNS}" ];
     then
@@ -393,6 +452,9 @@ function apply_config() {
     KUBE_UNINSTALLED_MASTER=()
 
     while IFS= read -r KUBE_CURRENT_MASTER; do
+      upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+      display_message_result "Pushing master"
+
       MASTER_STATUS=$(ssh_command "${KUBE_CURRENT_MASTER}" "sudo ./km --status" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
       display_message "${KUBE_CURRENT_MASTER} is $MASTER_STATUS" "INFO"
       if [ "${MASTER_STATUS}" == "installed" ];
@@ -410,6 +472,10 @@ function apply_config() {
       CURRENT_MASTER=${KUBE_UNINSTALLED_MASTER[0]}
       display_message "Selecting ${CURRENT_MASTER} as first master" "INFO"
 
+      upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+      display_message_result "Pushing master"
+
+
       ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode multi --network-type ${KUBE_NET} --kube-address ${LB_DNS} --first-master" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"    
       unset KUBE_UNINSTALLED_MASTER[0]
     else   
@@ -423,7 +489,11 @@ function apply_config() {
 # At this step, we know one master is installed (maybe more)
 # We can ask it if the worker candidates are already known
 # by the cluster install it or not
-  CURRENT_MASTER=$(yq eval '.kube[].masters[].server' "$1"|head -n 1)
+  CURRENT_MASTER=$(jq -r '.kube.masters[].server' "$1"|head -n 1)
+
+  upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+  display_message_result "Pushing master"
+
   KUBE_CONFIG=$(ssh_command "${CURRENT_MASTER}" "sudo ./km --kubeconfig" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}")
   display_message_result "Downloading kubeconfig"
   echo "${KUBE_CONFIG}" > cache/config
@@ -443,6 +513,9 @@ function apply_config() {
   then
     for CURRENT_MASTER in "${KUBE_UNINSTALLED_MASTER[@]}"
     do
+      upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+      display_message_result "Pushing master"
+
       upload_master_config "${CURRENT_MASTER}" "kube-config.tgz" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
       display_message_result "Uploading archive config to '${CURRENT_MASTER}'"
       ssh_command "${CURRENT_MASTER}" "sudo ./km --apply --mode multi --km-token ${KUBE_TOKEN}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
@@ -454,25 +527,31 @@ function apply_config() {
 
 
   display_section "Deploying workers >>"
-  KUBE_WORKERS=$(yq eval '.kube[].workers[].server' "$1")
+  KUBE_WORKERS=$(jq -r '.kube.workers' "$1"| jq -r ".server | select (. != null)")
   export KUBE_WORKERS
+  if [ -n "${KUBE_WORKERS}" ];
+  then
+    while IFS= read -r KUBE_CURRENT_WORKER; do
+      WORKER_STATUS=$(kubectl --kubeconfig cache/config get node -o wide|grep "${KUBE_CURRENT_WORKER}"|wc -l)
+      display_message_result "Checking worker '${KUBE_CURRENT_WORKER}' in cluster"
+      if [ "${WORKER_STATUS}" -eq 0 ];
+      then
+        upload_tools "${CURRENT_MASTER}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+        display_message_result "Pushing master"
 
-  while IFS= read -r KUBE_CURRENT_WORKER; do
-    WORKER_STATUS=$(kubectl --kubeconfig cache/config get node -o wide|grep "${KUBE_CURRENT_WORKER}"|wc -l)
-    display_message_result "Checking worker '${KUBE_CURRENT_WORKER}' in cluster"
-    if [ "${WORKER_STATUS}" -eq 0 ];
-    then
-      display_message "Worker '${KUBE_CURRENT_WORKER}' to be installed" "INFO"
-      display_section "Deploying worker >>>> ${KUBE_CURRENT_WORKER}"
-      ssh_command "${KUBE_CURRENT_WORKER}" "sudo ./kw --apply --km-token ${KUBE_TOKEN}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
-      display_message_result "Worker '${KUBE_CURRENT_WORKER}' join cluster"
+        display_message "Worker '${KUBE_CURRENT_WORKER}' to be installed" "INFO"
+        display_section "Deploying worker >>>> ${KUBE_CURRENT_WORKER}"
+        ssh_command "${KUBE_CURRENT_WORKER}" "sudo ./kw --apply --km-token ${KUBE_TOKEN}" "${SSH_USER}" "${SSH_PASS}" "${SSH_KEY}"
+        display_message_result "Worker '${KUBE_CURRENT_WORKER}' join cluster"
 
-    else
-      display_message "Worker '${KUBE_CURRENT_WORKER}' already known - skipping" "OK"
-    fi
+      else
+        display_message "Worker '${KUBE_CURRENT_WORKER}' already known - skipping" "OK"
+      fi
 
-  done <<< "${KUBE_WORKERS}"
-
+    done <<< "${KUBE_WORKERS}"
+  else
+    display_message "No Worker to deploy" "INFO"
+  fi
 }
 
 # =============================================================================
@@ -511,9 +590,9 @@ then
   display_message "Command 'ssh' is needed but not installed" "ERROR"
   exit 1
 fi
-if ! command -v yq &> /dev/null;
+if ! command -v jq &> /dev/null;
 then
-  display_message "Command 'yq' is needed but not installed" "ERROR"
+  display_message "Command 'jq' is needed but not installed" "ERROR"
   exit 1
 fi
 
@@ -530,7 +609,7 @@ then
   exit 1
 fi
 
-yq eval-all  "${CONFIG}" > /dev/null 2>&1
+jq "." "${CONFIG}" > /dev/null 2>&1
 if [ "$?" -eq 1 ];
 then
   display_message "File ${CONFIG} not well formed" "ERROR"
