@@ -1,0 +1,16 @@
+Source: kube-tools
+Section: devel
+Priority: optional
+Maintainer: jfv-opensource <jfv.opensource@gmail.com>
+Build-Depends: debhelper-compat (= 13), help2man
+Standards-Version: 4.5.1
+Homepage: https://github.com/jfv-opensource/kube-tools
+Rules-Requires-Root: no
+
+Package: kube-tools
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}, jq, curl, gpg, wget, sshpass, openssh-client, jq
+Description: Set of tools to create a kubernetes cluster
+ Set of tools to create easily kubernetes clusters with
+ different architectures / configurations.
