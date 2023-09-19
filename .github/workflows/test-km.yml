@@ -56,10 +56,11 @@ jobs:
       # replace source "./common" command by common file content
       - name: Run inline.sh for each kube-tools script
         run: |
-          ./inline.sh --in-file km  --out-file km.sh
-          ./inline.sh --in-file kc  --out-file kc.sh
-          ./inline.sh --in-file kw  --out-file kw.sh
-          ./inline.sh --in-file klb --out-file klb.sh
+          mkdir -p build
+          ./inline.sh --in-file km  --out-file build/km.sh
+          ./inline.sh --in-file kc  --out-file build/kc.sh
+          ./inline.sh --in-file kw  --out-file build/kw.sh
+          ./inline.sh --in-file klb --out-file build/klb.sh
 
       - name: Build and push
         uses: docker/build-push-action@v4
@@ -76,10 +77,10 @@ jobs:
         with:
           name: kube-tools-artifact
           path: |
-            km.sh
-            kc.sh
-            kw.sh
-            klb.sh
+            build/km.sh
+            build/kc.sh
+            build/kw.sh
+            build/klb.sh
             config
             README.md
             License
