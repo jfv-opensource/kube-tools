@@ -12,7 +12,7 @@ RUN apt update && \
     apt-get autoremove --yes  && \
     rm -rf /var/lib/{apt,dpkg,cache,log}/ 
 
-COPY --chmod=755 kc.sh klb.sh kw.sh km.sh /usr/bin
+COPY --chmod=755 build/kc.sh build/klb.sh build/kw.sh build/km.sh /usr/bin
 ENTRYPOINT ["/usr/bin/kc.sh"]
 
 
