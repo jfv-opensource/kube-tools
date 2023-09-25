@@ -425,7 +425,7 @@ function apply_config() {
 
   if [ "${KUBE_COMPUTED_TYPE}" == "MULTI" ];
   then   
-    KUBE_MASTERS=$(jq -r '.kube.masters[]' "$1"|jq ".server | select (. != null)")
+    KUBE_MASTERS=$(jq -r '.kube.masters[]' "$1"|jq -r ".server | select (. != null)")
     
     LB_TYPE=$(jq -r '.kube."load-balancers"[].type| select( . != null )' "$1"|head -n 1)
     LB_DNS=$(jq -r '.kube."load-balancers"[].dns| select( . != null )' "$1"|grep -v 'null'|head -n 1)   
