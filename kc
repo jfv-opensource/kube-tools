@@ -532,7 +532,7 @@ function apply_config() {
 
 
   display_section "Deploying workers >>"
-  KUBE_WORKERS=$(jq -r '.kube.workers' "$1"| jq -r ".server | select (. != null)")
+  KUBE_WORKERS=$(jq -r '.kube.workers[]' "$1"| jq -r ".server | select (. != null)")
   export KUBE_WORKERS
   if [ -n "${KUBE_WORKERS}" ];
   then
