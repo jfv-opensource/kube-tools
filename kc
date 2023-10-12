@@ -150,7 +150,7 @@ function download_master_config() {
 
   if [ -n "$3" ];
   then
-    target="$3@$target"
+    target=$( echo "$3@$target")
   fi
 
   if [ -n "$4" ];
@@ -426,6 +426,7 @@ function apply_config() {
   if [ "${KUBE_COMPUTED_TYPE}" == "MULTI" ];
   then   
     KUBE_MASTERS=$(jq -r '.kube.masters[]' "$1"|jq -r ".server | select (. != null)")
+    KUBE_WORKERS=$(jq -r '.kube.workers[]' "$1"| jq -r ".server | select (. != null)")
     
     LB_TYPE=$(jq -r '.kube."load-balancers"[].type| select( . != null )' "$1"|head -n 1)
     LB_DNS=$(jq -r '.kube."load-balancers"[].dns| select( . != null )' "$1"|grep -v 'null'|head -n 1)   
@@ -445,7 +446,7 @@ function apply_config() {
     fi
 
     case "${LB_TYPE}" in
-      "nginx") install_nginx_servers "${LB_SERVERS}" "${KUBE_MASTERS}";;
+      "nginx") install_nginx_servers "${LB_SERVERS}" "${KUBE_MASTERS}" "${KUBE_WORKERS}";;
       "external") ;;
       *) display_message "Config does not references a supported load-balancer type for a multi master configuration" "ERROR"; exit 1;;
     esac
@@ -532,7 +533,7 @@ function apply_config() {
 
 
   display_section "Deploying workers >>"
-  KUBE_WORKERS=$(jq -r '.kube.workers[]' "$1"| jq -r ".server | select (. != null)")
+
   export KUBE_WORKERS
   if [ -n "${KUBE_WORKERS}" ];
   then
@@ -630,4 +631,3 @@ case "$COMMAND" in
      display_message "Usage: kc --dry|--apply|--status|--kubeconfig|--version|--help [--user <user>] [--password <password>] [--ssh-key ssh-key-file] --config Configuration-file" "ERROR"; 
      exit 1;;
 esac
-

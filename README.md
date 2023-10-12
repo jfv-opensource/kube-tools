@@ -170,14 +170,14 @@ The kube load-balancer deploys one load-balancer to dispatch requests between ma
 
 ### Command
 
-Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> --master <master1> [--master <master2>] ...
+Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> --master <master1> [--master <master2>] ... --worker <worker1> [--worker <worker2>] ...
 
 #### Options
 
  * **--dry**: Run configuration without applying.
  * **--apply**: Run configuration and apply it.
  * **--status**: Display the current status of the kubernetes cluster.
-  * **--list-types**: Display supported load-balancing type.
+ * **--list-types**: Display supported load-balancing type.
  * **--version**: Display version information and exit.
  * **--help**: Display this help and exit.
 
@@ -185,3 +185,4 @@ Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> -
 
  * **--type**: Define the load balancer type (should not be changed after installation)
  * **--master**: Define a server name or ip to include into load balancing
+ * **--worker**: Define a worker name or ip to include into load balancing
