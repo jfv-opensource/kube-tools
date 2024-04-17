@@ -12,65 +12,69 @@ build/%.sh: %
 debian/%.1: build/%
 	./genman.sh $< > $@
 
-default: build
+all: $(TARGETS)
 
-common-build: $(TARGETS)
+install:
+	mkdir -p $(DESTDIR)/usr/bin
+	install -m 0755 -t $(DESTDIR)/usr/bin $(BINS)
 
-build: common-build
-	mkdir -p usr/bin
-	cp -f  $(BINS) usr/bin/
+uninstall:
+	rm -f $(addprefix $(DESTDIR)/usr/bin/, $(SCRIPTS))
 
 clean:
 	rm -f $(TARGETS)
-	-rm -Rf docker/debian/*/build
-	-rm -Rf docker/ubuntu/*/build
 
 distclean: clean
 
 .PHONY: all install uninstall clean distclean
 
-.PHONY: debian build
 debian: 
 	debuild -us -uc
 
 debian-clean:
 	debclean
 
+.PHONY: debian debian-clean
+
 docker: docker-debian-bookworm docker-ubuntu-focal docker-ubuntu-jammy docker-ubuntu-noble
 
-docker-debian-bookworm: common-build
+docker-debian-bookworm: $(INLINES)
 	mkdir -p docker/debian/bookworm/build/
-	cp -f build/km docker/debian/bookworm/build/km.sh
-	cp -f build/kc docker/debian/bookworm/build/kc.sh
-	cp -f build/kw docker/debian/bookworm/build/kw.sh
-	cp -f build/klb docker/debian/bookworm/build/klb.sh
+	cp -f build/km.sh docker/debian/bookworm/build/km.sh
+	cp -f build/kc.sh docker/debian/bookworm/build/kc.sh
+	cp -f build/kw.sh docker/debian/bookworm/build/kw.sh
+	cp -f build/klb.sh docker/debian/bookworm/build/klb.sh
 	docker build -t kubetools-debian docker/debian/bookworm/
 
-docker-ubuntu-focal: common-build
+docker-ubuntu-focal: $(INLINES)
 	mkdir -p docker/ubuntu/focal/build/
-	cp -f build/km docker/ubuntu/focal/build/km.sh
-	cp -f build/kc docker/ubuntu/focal/build/kc.sh
-	cp -f build/kw docker/ubuntu/focal/build/kw.sh
-	cp -f build/klb docker/ubuntu/focal/build/klb.sh
+	cp -f build/km.sh docker/ubuntu/focal/build/km.sh
+	cp -f build/kc.sh docker/ubuntu/focal/build/kc.sh
+	cp -f build/kw.sh docker/ubuntu/focal/build/kw.sh
+	cp -f build/klb.sh docker/ubuntu/focal/build/klb.sh
 	-docker rmi kubetools-ubuntu-focal
 	docker build -t kubetools-ubuntu-focal docker/ubuntu/focal
 
-docker-ubuntu-jammy: common-build
+docker-ubuntu-jammy: $(INLINES)
 	mkdir -p docker/ubuntu/jammy/build/
-	cp -f build/km docker/ubuntu/jammy/build/km.sh
-	cp -f build/kc docker/ubuntu/jammy/build/kc.sh
-	cp -f build/kw docker/ubuntu/jammy/build/kw.sh
-	cp -f build/klb docker/ubuntu/jammy/build/klb.sh
+	cp -f build/km.sh docker/ubuntu/jammy/build/km.sh
+	cp -f build/kc.sh docker/ubuntu/jammy/build/kc.sh
+	cp -f build/kw.sh docker/ubuntu/jammy/build/kw.sh
+	cp -f build/klb.sh docker/ubuntu/jammy/build/klb.sh
 	-docker rmi kubetools-ubuntu-jammy
 	docker build -t kubetools-ubuntu-jammy docker/ubuntu/jammy
 
 
-docker-ubuntu-noble: common-build
+docker-ubuntu-noble: $(INLINES)
 	mkdir -p docker/ubuntu/noble/build/
-	cp -f build/km docker/ubuntu/noble/build/km.sh
-	cp -f build/kc docker/ubuntu/noble/build/kc.sh
-	cp -f build/kw docker/ubuntu/noble/build/kw.sh
-	cp -f build/klb docker/ubuntu/noble/build/klb.sh
+	cp -f build/km.sh docker/ubuntu/noble/build/km.sh
+	cp -f build/kc.sh docker/ubuntu/noble/build/kc.sh
+	cp -f build/kw.sh docker/ubuntu/noble/build/kw.sh
+	cp -f build/klb.sh docker/ubuntu/noble/build/klb.sh
 	-docker rmi kubetools-ubuntu-nobble
 	docker build -t kubetools-ubuntu-nobble docker/ubuntu/noble
+
+docker-clean:
+	-rm -Rf docker/debian/*/build
+	-rm -Rf docker/ubuntu/*/build
 
