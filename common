@@ -70,7 +70,7 @@ function common_install() {
     add-apt-repository --yes "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
     display_message_result "Adding docker package repository"
    
-   set -x
+    rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -a 2> /dev/null| gpg --dearmour -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     display_message_result "Adding google package repository signature"
     chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
