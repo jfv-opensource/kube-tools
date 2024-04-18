@@ -20,7 +20,7 @@ jobs:
   km_matrix:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04]
+        os: [ ubuntu-22.04, ubuntu-20.04]
     runs-on: ${{ matrix.os }}
     steps:
         # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it

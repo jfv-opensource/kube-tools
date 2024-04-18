@@ -1,4 +1,4 @@
-FROM debian:stable-slim
+FROM ubuntu:noble
 
 COPY build/kc.sh build/klb.sh build/kw.sh build/km.sh /usr/bin/
 

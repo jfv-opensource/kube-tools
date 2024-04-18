@@ -6,6 +6,7 @@ SCRIPT_VERSION="1.0.1"
 COMMAND=""
 
 TARGET_MASTERS=""
+TARGET_WORKERS=""
 TARGET_TYPE="nginx"
 
 source "./common"
@@ -19,7 +20,7 @@ function help() {
 
 Kubernetes load-balancer
 
-Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> --master <master1> [--master <master2>] ...
+Usage: klb --dry|--apply|--status|--version|--help|--list-types  --type <type> --master <master1> [--master <master2>] ... --worker <worker1> [--worker <worker2>] ...
 
 Options (exclusives):
 
@@ -47,7 +48,11 @@ Parameters:
    Define the load balancer type (should not be changed after installation)
 
  --master
-   Define a server name or ip to include into load balancing
+   Define a server name or ip to include into load balancing as master for API
+
+ --worker
+   Define a server name or ip to include into load balancing as worker
+
 
 Exit status:
  0      if OK,
@@ -101,7 +106,7 @@ function check_type() {
 # =============================================================================
 
 opts=$(getopt \
-    --longoptions "help,version,dry,apply,status,list-types,type:,master:" \
+    --longoptions "help,version,dry,apply,status,list-types,type:,master:,worker:" \
     --name "$(basename "$0")" \
     --options "" \
     -- "$@"
@@ -119,13 +124,14 @@ do
         --status) COMMAND="status";display_message "Not yet implemented" "KO"; exit 1;;        
         --type) TARGET_TYPE=$(check_type "${2,,}"); shift;;
         --master) TARGET_MASTERS="${TARGET_MASTERS}\tserver $2;\n";  shift;;
+        --worker) TARGET_WORKERS="${TARGET_WORKERS}\tserver $2;\n";  shift;;
     esac
     shift
 done
 
 if [ -z "${COMMAND}" ];
 then
-    display_message "Usage: km --dry|--apply|--status|--version|--help --master <master1> [--master <master2>] --master <master3> ..." "ERROR"
+    display_message "Usage: km --dry|--apply|--status|--version|--help --master <master1> [--master <master2>] --master <master3> ... --worker <worker1> --worker <worker2> ..." "ERROR"
     exit 1
 fi
 
@@ -142,10 +148,16 @@ then
   exit 1
 fi
 
+if [ "${TARGET_WORKERS}" == "" ];
+then
+  display_message "No worker to add" "ERROR"
+  exit 1
+fi
+
 if [ "${COMMAND}" == "apply" ];
 then
     case "${TARGET_TYPE}" in
-        "nginx") install_nginx_instance "${TARGET_MASTERS}";;
+        "nginx") install_nginx_instance "${TARGET_MASTERS}" "${TARGET_WORKERS}";;
         *) display_message "Type '$1' not supported" "ERROR";
            exit 1;;
     esac

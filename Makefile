@@ -1,40 +1,66 @@
-default: build
+SCRIPTS = km kc kw klb
+INLINES = $(patsubst %,build/%.sh,$(SCRIPTS))
+BINS = $(patsubst %.sh,%,$(INLINES))
+MANS = $(patsubst %,debian/%.1,$(SCRIPTS))
+TARGETS = $(INLINES) $(BINS) $(MANS)
 
-common-build: common-clean
+build/%.sh: %
 	mkdir -p build
-	-./inline.sh --in-file km  --out-file build/km
-	-./inline.sh --in-file kc  --out-file build/kc
-	-./inline.sh --in-file kw  --out-file build/kw
-	-./inline.sh --in-file klb --out-file build/klb
-	chmod 755 build/*
+	./inline.sh --in-file $< --out-file $@
+	chmod 755 $@
 
-common-clean:
-	-rm build/*
-	-rmdir build
+debian/%.1: build/%
+	./genman.sh $< > $@
 
-build: common-build
-	mkdir -p usr/bin
-	cp -f  build/* usr/bin/
-	help2man --no-info usr/bin/kc -n 'Kubernetes controller tool' > debian/kc.1
-	help2man --no-info usr/bin/km -n 'Kubernetes master' > debian/km.1
-	help2man --no-info usr/bin/kw -n 'Kubernetes worker' > debian/kw.1
-	help2man --no-info usr/bin/klb -n 'Kubernetes load-balancer' > debian/klb.1
+all: $(TARGETS)
 
-clean: common-clean
-	-rm -f debian/*.1 
-	-rm -f usr/bin/*
-	-rmdir usr/bin usr
+install:
+	mkdir -p $(DESTDIR)/usr/bin
+	install -m 0755 -t $(DESTDIR)/usr/bin $(BINS)
 
-.PHONY: debian build
+uninstall:
+	rm -f $(addprefix $(DESTDIR)/usr/bin/, $(SCRIPTS))
+
+clean::
+	rm -f $(TARGETS)
+
+distclean: clean
+
+.PHONY: all install uninstall clean distclean
+.DELETE_ON_ERROR:
+
 debian: 
 	debuild -us -uc
 
 debian-clean:
 	debclean
 
-docker: common-build
-	cp -f build/km build/km.sh
-	cp -f build/kc build/kc.sh
-	cp -f build/kw build/kw.sh
-	cp -f build/klb build/klb.sh
-	docker build -t kubetools .
+.PHONY: debian debian-clean
+
+DEBIANS = bookworm
+UBUNTUS = focal jammy noble
+DOCKER_DEBIANS = $(addprefix docker-debian-,$(DEBIANS)) 
+DOCKER_UBUNTUS = $(addprefix docker-ubuntu-,$(UBUNTUS))
+
+docker-debian-%: $(INLINES)
+	mkdir -p docker/debian/$*/build/
+	cp -f $(INLINES) docker/debian/$*/build/
+	-docker rmi kubetools-debian-$*
+	docker build -t kubetools-debian-$* docker/debian/$*/
+
+docker-ubuntu-%: $(INLINES)
+	mkdir -p docker/ubuntu/$*/build/
+	cp -f $(INLINES) docker/ubuntu/$*/build/
+	-docker rmi kubetools-ubuntu-$*
+	docker build -t kubetools-ubuntu-$* docker/ubuntu/$*
+
+docker-debian: $(DOCKER_DEBIANS)
+docker-ubuntu: $(DOCKER_UBUNTUS)
+docker: docker-debian docker-ubuntu
+$(DOCKERS):
+
+clean-docker:
+	-rm -Rf docker/*/*/build
+
+.PHONY: docker-debian docker-ubuntu docker clean-docker
+
