@@ -15,6 +15,9 @@ apt install jq -y
 
 **Warning**: this code source is distributed as example and should not be used in production. It does not protect agains code injection by example.
 
+
+/!\ Last version of kubernetes will be installed byu default.
+
 ## kc - Kube controller
 
 The kube controller pilot the scripts deployed on the differents hosts to deploy and configure the kubernetes cluster from a *json* description file.

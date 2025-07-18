@@ -58,7 +58,7 @@ function common_install() {
     display_section "Configure repositories & install packages"
     apt update  > /dev/null 2>&1
     display_message_result "Updating package repository"
-    apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates > /dev/null 2>&1
+    apt install -y jq curl gnupg2 software-properties-common apt-transport-https ca-certificates > /dev/null 2>&1
     display_message_result "Installing base needed packages"
 
     mkdir -p /etc/apt/keyrings
@@ -70,14 +70,30 @@ function common_install() {
     add-apt-repository --yes "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$(lsb_release -a 2> /dev/null|grep "Distributor ID:"|cut -d$'\t' -f2|tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable"
     display_message_result "Adding docker package repository"
    
-    rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -a 2> /dev/null| gpg --dearmour -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    display_message_result "Adding google package repository signature"
-    chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+#    rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+#    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -a 2> /dev/null| gpg --dearmour -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+#    display_message_result "Adding google package repository signature"
+#    chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+#    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+#    display_message_result "Adding google package repository"
+#    chmod 644 /etc/apt/sources.list.d/kubernetes.list
+
+# Try to get the last version of kubernetes
+
+    rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    last_version=$(curl -s https://api.github.com/repos/kubernetes/kubernetes/releases/latest | jq -r .tag_name| cut -d . -f1,2)
+    display_message_result "Searching last kubernetes version"
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/${last_version}/deb/Release.key" | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null 2>&1
+
+    #curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -  > /dev/null 2>&1
+
+
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${last_version}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null 2>&1
+    display_message_result "Adding google package repository signature"
+    #echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list > /de>
     display_message_result "Adding google package repository"
-    chmod 644 /etc/apt/sources.list.d/kubernetes.list
+
 
     apt update  > /dev/null 2>&1
     display_message_result "Updating package repository"
