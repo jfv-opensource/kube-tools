@@ -1,8 +1,8 @@
-{ 
+{
   "kube": {
     "network-type": "flannel",
     "masters": [
-      { "server": "192.168.0.60" },
+      { "server": "192.168.0.60" }
     ],
     "workers": [
       { "server": "192.168.0.65" },
